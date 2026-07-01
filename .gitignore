@@ -86,3 +86,9 @@ results/python_datassb_extract/
 
 # Generated Python batch dataSSB extraction results
 results/python_datassb_batch/
+
+# Generated Python online profiling and distribution results
+results/python_online_profile/
+results/python_online_rxgridssb_dataset/
+results/python_rxgrid_distribution/
+results/python_datassb_batch/
