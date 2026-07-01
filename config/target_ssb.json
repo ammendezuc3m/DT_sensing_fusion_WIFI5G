@@ -1,0 +1,24 @@
+{
+  "target_ssb": 0,
+  "created_at": "2026-06-22T16:05:58.268",
+  "duration_s": 60,
+  "valid_captures": 139,
+  "total_captures": 139,
+  "valid_ratio": 1,
+  "target_ratio_among_valid": 1,
+  "ibar_counts_0_to_7": [
+    139,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "band": "n78",
+  "gscn": 7875,
+  "center_frequency_hz": 3.54144E+9,
+  "scs_khz": 30,
+  "notes": "Usar este ibar_SSB para filtrar capturas del dataset."
+}

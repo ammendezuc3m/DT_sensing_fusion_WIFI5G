@@ -1,0 +1,93 @@
+{
+  "map_id": "mapa2D_v1",
+  "description": "Mapa inicial para sensing fusion con 5G SSB, MikroTik y camara.",
+  "coordinate_system": {
+    "columns_visible": [7, 6, 5, 4, 3, 2],
+    "rows_visible": [2, 3, 4, 5, 6, 7, 8, 9],
+    "notes": "La columna 1 corresponde a la zona exterior derecha donde se coloca el receptor 5G."
+  },
+  "fixed_devices": {
+    "5g_dot": {
+      "name": "5G DOT",
+      "approx_position": {
+        "col": 8,
+        "row": 9
+      },
+      "notes": "Colocado fuera del mapa, zona inferior izquierda. No usar posiciones justo debajo por patron de radiacion."
+    },
+    "5g_rx_usrp_b210": {
+      "name": "5G RX",
+      "position": {
+        "col": 1,
+        "row": 5
+      },
+      "height_m": 1.1,
+      "notes": "Receptor colocado en mesas de columna 1, orientado hacia el Dot y el centro del mapa."
+    },
+    "mikrotik_ap": {
+      "name": "MikroTik AP",
+      "monitored_area": "col_2"
+    },
+    "mikrotik_sta": {
+      "name": "MikroTik STA",
+      "monitored_area": "col_2"
+    },
+    "camera": {
+      "name": "Camera",
+      "monitored_area": "row_2"
+    }
+  },
+  "5g_target_zones": {
+    "empty": {
+      "label": "empty",
+      "position": null,
+      "description": "Escena vacia."
+    },
+    "P1": {
+      "label": "P1",
+      "position": {
+        "col": 6,
+        "row": 7
+      },
+      "description": "Zona inferior izquierda util, no justo debajo del Dot."
+    },
+    "P2": {
+      "label": "P2",
+      "position": {
+        "col": 6,
+        "row": 5
+      },
+      "description": "Zona superior izquierda/intermedia, alejada de P1."
+    },
+    "P3": {
+      "label": "P3",
+      "position": {
+        "col": 4,
+        "row": 7
+      },
+      "description": "Zona inferior central-derecha, dentro de la zona ciega."
+    },
+    "P4": {
+      "label": "P4",
+      "position": {
+        "col": 3,
+        "row": 5
+      },
+      "description": "Zona superior derecha ciega, cercana al lado del receptor pero fuera de columna 2."
+    }
+  },
+  "excluded_areas": {
+    "camera_area": "row_2",
+    "mikrotik_area": "col_2",
+    "obstacles": [
+      {"col": 4, "row": 3},
+      {"col": 3, "row": 3},
+      {"col": 4, "row": 4},
+      {"col": 3, "row": 4},
+      {"col": 7, "row": 8},
+      {"col": 6, "row": 8},
+      {"col": 7, "row": 9},
+      {"col": 6, "row": 9}
+    ]
+  }
+}

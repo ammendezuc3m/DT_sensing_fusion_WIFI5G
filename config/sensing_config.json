@@ -1,0 +1,17 @@
+{
+  "project_name": "DT_sensing_fusion",
+  "dataset_version": "v001",
+  "band": "n78",
+  "gscn": 7875,
+  "numerology": 1,
+  "scs_khz": 30,
+  "nrb_ssb": 20,
+  "demod_rb_debug": 30,
+  "rx_gain": 70,
+  "capture_duration_ms": 20,
+  "target_window_size": 5,
+  "save_full_grid": true,
+  "save_useful_grid": true,
+  "save_channel_estimate": true,
+  "notes": "Dataset basado en canal complejo H(k,l,t) estimado desde SSB. Modelo previsto: PCA + SVM RBF."
+}

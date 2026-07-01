@@ -1,0 +1,46 @@
+{
+  "model_rxGridSSB": {
+    "accuracy": 1.0,
+    "precision_P5": 1.0,
+    "recall_P5": 1.0,
+    "f1_P5": 1.0,
+    "confusion_matrix": [
+      [
+        9941,
+        0
+      ],
+      [
+        0,
+        9950
+      ]
+    ],
+    "roc_auc": 1.0,
+    "pr_auc": 1.0,
+    "classification_report": "              precision    recall  f1-score   support\n\n       empty     1.0000    1.0000    1.0000      9941\n          P5     1.0000    1.0000    1.0000      9950\n\n    accuracy                         1.0000     19891\n   macro avg     1.0000    1.0000    1.0000     19891\nweighted avg     1.0000    1.0000    1.0000     19891\n",
+    "model": "model_rxGridSSB",
+    "device": "cuda",
+    "n_train": 59645,
+    "n_val": 19756,
+    "n_test": 19891,
+    "predict_ms_per_sample": 0.018887069780035584,
+    "config": {
+      "dataset_dir": "data/dataset_datassb/datassb_side_v1_6labels",
+      "out_dir": "results/binary_empty_vs_P5_rx",
+      "hssb_dir": null,
+      "complex_mode": "abs_phase",
+      "raw_group_size": 3,
+      "raw_stride": 3,
+      "analysis_only": false,
+      "skip_figures": false,
+      "skip_training": false,
+      "skip_dataset_cache": true,
+      "models": "rx",
+      "epochs": 20,
+      "batch_size": 128,
+      "lr": 0.0008,
+      "weight_decay": 0.001,
+      "patience": 12,
+      "seed": 42
+    }
+  }
+}
