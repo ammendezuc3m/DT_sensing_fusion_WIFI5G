@@ -121,3 +121,6 @@ logs/python_matlab_interleaved_*/
 # Raw generated captures
 data/python_iq_captures/
 data/python_iq_blocks/
+
+# Python labeled SSB datasets
+data/python_ssb_datasets/
