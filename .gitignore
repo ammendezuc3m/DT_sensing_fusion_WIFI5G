@@ -83,3 +83,6 @@ results/python_pss_detection/
 
 # Generated Python dataSSB extraction results
 results/python_datassb_extract/
+
+# Generated Python batch dataSSB extraction results
+results/python_datassb_batch/
