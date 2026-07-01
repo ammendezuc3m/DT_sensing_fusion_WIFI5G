@@ -203,7 +203,96 @@ PY
 
 ---
 
-## 9. Files intentionally not tracked by Git
+## 9. Python UHD raw IQ capture
+
+The first Python-only migration step is implemented.
+
+Scripts:
+
+```text
+src/python/ssb_python/test_capture_iq_uhd.py
+src/python/ssb_python/capture_iq_blocks_uhd.py
+```
+
+These scripts reproduce the raw SDR capture stage of the MATLAB pipeline:
+
+```matlab
+waveform = capture(rx, captureDuration);
+```
+
+### 9.1. Single 20 ms IQ capture
+
+```bash
+cd ~/AlbertoDir/DT_sensing_fusion
+source .venv_uhd/bin/activate
+
+python src/python/ssb_python/test_capture_iq_uhd.py \
+  --serial 34B73C3 \
+  --freq 3541.44e6 \
+  --rate 15.36e6 \
+  --gain 60 \
+  --duration-ms 20 \
+  --channel 0
+```
+
+Expected output:
+
+```text
+waveform shape = (307200,)
+dtype = complex64
+```
+
+### 9.2. Repeated 20 ms IQ block capture
+
+```bash
+cd ~/AlbertoDir/DT_sensing_fusion
+source .venv_uhd/bin/activate
+
+python src/python/ssb_python/capture_iq_blocks_uhd.py \
+  --serial 34B73C3 \
+  --freq 3541.44e6 \
+  --rate 15.36e6 \
+  --gain 60 \
+  --duration-ms 20 \
+  --num-blocks 20 \
+  --channel 0 \
+  --progress-every 1
+```
+
+Expected output:
+
+```text
+waveform shape = (20, 307200)
+dtype = complex64
+```
+
+The recommended initial gain for the Python port is:
+
+```text
+gain = 60 dB
+```
+
+Observed gain comparison during initial tests:
+
+```text
+gain=70:
+  sat_real_gt_0p99_percent_mean ≈ 0.65 %
+  sat_imag_gt_0p99_percent_mean ≈ 0.64 %
+
+gain=65:
+  sat_real_gt_0p99_percent_mean ≈ 0.57 %
+  sat_imag_gt_0p99_percent_mean ≈ 0.56 %
+
+gain=60:
+  sat_real_gt_0p99_percent_mean ≈ 0.42 %
+  sat_imag_gt_0p99_percent_mean ≈ 0.44 %
+```
+
+Captured IQ files are saved under `data/`, which is intentionally ignored by Git.
+
+---
+
+## 10. Files intentionally not tracked by Git
 
 The repository does not track:
 

@@ -1,6 +1,6 @@
 # DT_sensing_fusion Runbook
 
-Operational runbook for capture, online inference, JSON export and Git workflow.
+Operational runbook for capture, online inference, JSON export, Python UHD capture and Git workflow.
 
 ---
 
@@ -146,7 +146,102 @@ PY
 
 ---
 
-## 7. Git workflow
+## 7. Python UHD raw IQ capture
+
+### 7.1. Single 20 ms capture
+
+```bash
+cd ~/AlbertoDir/DT_sensing_fusion
+source .venv_uhd/bin/activate
+
+python src/python/ssb_python/test_capture_iq_uhd.py \
+  --serial 34B73C3 \
+  --freq 3541.44e6 \
+  --rate 15.36e6 \
+  --gain 60 \
+  --duration-ms 20 \
+  --channel 0
+```
+
+Expected:
+
+```text
+waveform shape = (307200,)
+dtype = complex64
+```
+
+### 7.2. Repeated 20 ms block capture
+
+```bash
+cd ~/AlbertoDir/DT_sensing_fusion
+source .venv_uhd/bin/activate
+
+python src/python/ssb_python/capture_iq_blocks_uhd.py \
+  --serial 34B73C3 \
+  --freq 3541.44e6 \
+  --rate 15.36e6 \
+  --gain 60 \
+  --duration-ms 20 \
+  --num-blocks 20 \
+  --channel 0 \
+  --progress-every 1
+```
+
+Expected:
+
+```text
+waveform shape = (20, 307200)
+dtype = complex64
+```
+
+Recommended initial Python capture gain:
+
+```text
+gain = 60 dB
+```
+
+Current observed capture performance:
+
+```text
+capture duration/block ≈ 20.2 ms
+samples/block = 307200
+blocks_per_second ≈ 15.4 with compressed HDF5 writing
+```
+
+The HDF5 write overhead is only for offline testing. The future online pipeline will process blocks in memory.
+
+---
+
+## 8. Next Python-only implementation phase
+
+The next implementation phase is offline IQ inspection.
+
+Goal:
+
+```text
+read captured .h5/.npz IQ files
+compute block-level signal metrics
+plot power over samples
+plot spectrum
+detect obvious bursts/energy changes
+prepare for PSS/NID2 detection
+```
+
+Target script:
+
+```text
+src/python/ssb_python/inspect_iq_capture.py
+```
+
+After that, the next DSP phase will be:
+
+```text
+PSS generation -> NID2 search -> timing estimate -> CFO -> OFDM demod -> dataSSB
+```
+
+---
+
+## 9. Git workflow
 
 Check status:
 
@@ -184,7 +279,7 @@ unless `.gitignore` has been reviewed carefully.
 
 ---
 
-## 8. Files that should not be committed
+## 10. Files that should not be committed
 
 Do not commit:
 
@@ -201,20 +296,4 @@ backups/
 *.hdf5
 large raw captures
 temporary online JSON files
-```
-
----
-
-## 9. Next Python-only implementation milestone
-
-The next implementation target is:
-
-```text
-USRP B210 -> 20 ms IQ capture -> save waveform as .npz/.h5
-```
-
-After that:
-
-```text
-waveform -> PSS/NID2/CFO/timing -> OFDM demod -> dataSSB -> rxGridSSB
 ```
