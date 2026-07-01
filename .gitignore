@@ -104,3 +104,20 @@ results/python_datassb_extract/
 results/python_pss_detection/
 results/python_iq_inspection/
 logs/python_matlab_interleaved_*/
+
+# Generated Python online / CFO / comparison outputs
+results/online/
+results/python_online_profile/
+results/python_online_rxgridssb_dataset/
+results/python_online_rxgridssb_dataset_cfo/
+results/python_rxgrid_distribution/
+results/python_matlab_rxgrid_compare/
+results/python_datassb_batch/
+results/python_datassb_extract/
+results/python_pss_detection/
+results/python_iq_inspection/
+logs/python_matlab_interleaved_*/
+
+# Raw generated captures
+data/python_iq_captures/
+data/python_iq_blocks/
