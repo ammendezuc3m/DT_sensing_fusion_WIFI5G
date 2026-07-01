@@ -1,0 +1,19 @@
+{
+  "dataset_dir": "data/dataset_datassb/datassb_side_v1_6labels",
+  "out_dir": "results/binary_empty_vs_P5_rx",
+  "hssb_dir": null,
+  "complex_mode": "abs_phase",
+  "raw_group_size": 3,
+  "raw_stride": 3,
+  "analysis_only": false,
+  "skip_figures": false,
+  "skip_training": false,
+  "skip_dataset_cache": true,
+  "models": "rx",
+  "epochs": 20,
+  "batch_size": 128,
+  "lr": 0.0008,
+  "weight_decay": 0.001,
+  "patience": 12,
+  "seed": 42
+}

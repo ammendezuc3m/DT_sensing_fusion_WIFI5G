@@ -1,0 +1,146 @@
+{
+  "n_files": 10,
+  "n_valid_captures": 99292,
+  "labels": {
+    "empty": {
+      "n_valid_captures": 49640,
+      "n_blocks": 5,
+      "blocks": [
+        "empty:block_01:datassb_side_v1_6labels_empty_block01_20260624_141149",
+        "empty:block_02:datassb_side_v1_6labels_empty_block02_20260624_143504",
+        "empty:block_03:datassb_side_v1_6labels_empty_block03_20260624_145939",
+        "empty:block_04:datassb_side_v1_6labels_empty_block04_20260624_151053",
+        "empty:block_05:datassb_side_v1_6labels_empty_block05_20260624_152235"
+      ],
+      "total_power_mean_db": 30.955883026123047,
+      "total_power_median_db": 30.795658111572266
+    },
+    "P5": {
+      "n_valid_captures": 49652,
+      "n_blocks": 5,
+      "blocks": [
+        "P5:block_01:datassb_side_v1_6labels_P5_block01_20260624_142259",
+        "P5:block_02:datassb_side_v1_6labels_P5_block02_20260624_144936",
+        "P5:block_03:datassb_side_v1_6labels_P5_block03_20260624_153828",
+        "P5:block_04:datassb_side_v1_6labels_P5_block04_20260624_160151",
+        "P5:block_05:datassb_side_v1_6labels_P5_block05_20260624_161810"
+      ],
+      "total_power_mean_db": 30.039329528808594,
+      "total_power_median_db": 30.076904296875
+    }
+  },
+  "splits_by_block": {
+    "P5:block_01:datassb_side_v1_6labels_P5_block01_20260624_142259": "test",
+    "P5:block_02:datassb_side_v1_6labels_P5_block02_20260624_144936": "train",
+    "P5:block_03:datassb_side_v1_6labels_P5_block03_20260624_153828": "train",
+    "P5:block_04:datassb_side_v1_6labels_P5_block04_20260624_160151": "train",
+    "P5:block_05:datassb_side_v1_6labels_P5_block05_20260624_161810": "val",
+    "empty:block_01:datassb_side_v1_6labels_empty_block01_20260624_141149": "train",
+    "empty:block_02:datassb_side_v1_6labels_empty_block02_20260624_143504": "test",
+    "empty:block_03:datassb_side_v1_6labels_empty_block03_20260624_145939": "train",
+    "empty:block_04:datassb_side_v1_6labels_empty_block04_20260624_151053": "train",
+    "empty:block_05:datassb_side_v1_6labels_empty_block05_20260624_152235": "val"
+  },
+  "files": [
+    {
+      "label": "P5",
+      "blockIndex": 1,
+      "sessionId": "datassb_side_v1_6labels_P5_block01_20260624_142259",
+      "filePath": "data/dataset_datassb/datassb_side_v1_6labels/P5/block_01/datassb_side_v1_6labels_P5_block01_20260624_142259.mat",
+      "nCaptures": 10000,
+      "nValid": 9950,
+      "blockKey": "P5:block_01:datassb_side_v1_6labels_P5_block01_20260624_142259",
+      "hSSBSource": "proxy_rxGridSSB"
+    },
+    {
+      "label": "P5",
+      "blockIndex": 2,
+      "sessionId": "datassb_side_v1_6labels_P5_block02_20260624_144936",
+      "filePath": "data/dataset_datassb/datassb_side_v1_6labels/P5/block_02/datassb_side_v1_6labels_P5_block02_20260624_144936.mat",
+      "nCaptures": 10000,
+      "nValid": 9939,
+      "blockKey": "P5:block_02:datassb_side_v1_6labels_P5_block02_20260624_144936",
+      "hSSBSource": "proxy_rxGridSSB"
+    },
+    {
+      "label": "P5",
+      "blockIndex": 3,
+      "sessionId": "datassb_side_v1_6labels_P5_block03_20260624_153828",
+      "filePath": "data/dataset_datassb/datassb_side_v1_6labels/P5/block_03/datassb_side_v1_6labels_P5_block03_20260624_153828.mat",
+      "nCaptures": 10000,
+      "nValid": 9950,
+      "blockKey": "P5:block_03:datassb_side_v1_6labels_P5_block03_20260624_153828",
+      "hSSBSource": "proxy_rxGridSSB"
+    },
+    {
+      "label": "P5",
+      "blockIndex": 4,
+      "sessionId": "datassb_side_v1_6labels_P5_block04_20260624_160151",
+      "filePath": "data/dataset_datassb/datassb_side_v1_6labels/P5/block_04/datassb_side_v1_6labels_P5_block04_20260624_160151.mat",
+      "nCaptures": 10000,
+      "nValid": 9963,
+      "blockKey": "P5:block_04:datassb_side_v1_6labels_P5_block04_20260624_160151",
+      "hSSBSource": "proxy_rxGridSSB"
+    },
+    {
+      "label": "P5",
+      "blockIndex": 5,
+      "sessionId": "datassb_side_v1_6labels_P5_block05_20260624_161810",
+      "filePath": "data/dataset_datassb/datassb_side_v1_6labels/P5/block_05/datassb_side_v1_6labels_P5_block05_20260624_161810.mat",
+      "nCaptures": 10000,
+      "nValid": 9850,
+      "blockKey": "P5:block_05:datassb_side_v1_6labels_P5_block05_20260624_161810",
+      "hSSBSource": "proxy_rxGridSSB"
+    },
+    {
+      "label": "empty",
+      "blockIndex": 1,
+      "sessionId": "datassb_side_v1_6labels_empty_block01_20260624_141149",
+      "filePath": "data/dataset_datassb/datassb_side_v1_6labels/empty/block_01/datassb_side_v1_6labels_empty_block01_20260624_141149.mat",
+      "nCaptures": 10000,
+      "nValid": 9941,
+      "blockKey": "empty:block_01:datassb_side_v1_6labels_empty_block01_20260624_141149",
+      "hSSBSource": "proxy_rxGridSSB"
+    },
+    {
+      "label": "empty",
+      "blockIndex": 2,
+      "sessionId": "datassb_side_v1_6labels_empty_block02_20260624_143504",
+      "filePath": "data/dataset_datassb/datassb_side_v1_6labels/empty/block_02/datassb_side_v1_6labels_empty_block02_20260624_143504.mat",
+      "nCaptures": 10000,
+      "nValid": 9941,
+      "blockKey": "empty:block_02:datassb_side_v1_6labels_empty_block02_20260624_143504",
+      "hSSBSource": "proxy_rxGridSSB"
+    },
+    {
+      "label": "empty",
+      "blockIndex": 3,
+      "sessionId": "datassb_side_v1_6labels_empty_block03_20260624_145939",
+      "filePath": "data/dataset_datassb/datassb_side_v1_6labels/empty/block_03/datassb_side_v1_6labels_empty_block03_20260624_145939.mat",
+      "nCaptures": 10000,
+      "nValid": 9896,
+      "blockKey": "empty:block_03:datassb_side_v1_6labels_empty_block03_20260624_145939",
+      "hSSBSource": "proxy_rxGridSSB"
+    },
+    {
+      "label": "empty",
+      "blockIndex": 4,
+      "sessionId": "datassb_side_v1_6labels_empty_block04_20260624_151053",
+      "filePath": "data/dataset_datassb/datassb_side_v1_6labels/empty/block_04/datassb_side_v1_6labels_empty_block04_20260624_151053.mat",
+      "nCaptures": 10000,
+      "nValid": 9956,
+      "blockKey": "empty:block_04:datassb_side_v1_6labels_empty_block04_20260624_151053",
+      "hSSBSource": "proxy_rxGridSSB"
+    },
+    {
+      "label": "empty",
+      "blockIndex": 5,
+      "sessionId": "datassb_side_v1_6labels_empty_block05_20260624_152235",
+      "filePath": "data/dataset_datassb/datassb_side_v1_6labels/empty/block_05/datassb_side_v1_6labels_empty_block05_20260624_152235.mat",
+      "nCaptures": 10000,
+      "nValid": 9906,
+      "blockKey": "empty:block_05:datassb_side_v1_6labels_empty_block05_20260624_152235",
+      "hSSBSource": "proxy_rxGridSSB"
+    }
+  ]
+}
