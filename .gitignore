@@ -92,3 +92,15 @@ results/python_online_profile/
 results/python_online_rxgridssb_dataset/
 results/python_rxgrid_distribution/
 results/python_datassb_batch/
+
+# Generated Python CFO, online, comparison and interleaved results
+results/python_online_profile/
+results/python_online_rxgridssb_dataset/
+results/python_online_rxgridssb_dataset_cfo/
+results/python_rxgrid_distribution/
+results/python_matlab_rxgrid_compare/
+results/python_datassb_batch/
+results/python_datassb_extract/
+results/python_pss_detection/
+results/python_iq_inspection/
+logs/python_matlab_interleaved_*/
