@@ -1,0 +1,51 @@
+# Python environments
+.venv/
+.venv_uhd/
+.venv_datassb/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+
+# MATLAB temporary files
+*.asv
+*.m~
+*.slxc
+*.mex*
+*.log
+
+# Logs and runtime
+logs/
+runtime/
+*.csv.tmp
+*.tmp
+
+# Data and large captures
+data/
+*.mat
+*.h5
+*.hdf5
+*.npz
+
+# Backups
+backups/
+*.bak
+*.bak_*
+*.zip
+*.tar
+*.tar.gz
+
+# Local notes / scratch
+200
+notasImplementacionMIAS
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
+
+# Online generated files
+results/online/
+results/online_rxgridssb_inference_log.csv
+online_rxgridssb_multiclass_log.csv
