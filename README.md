@@ -2,311 +2,540 @@
 
 Passive 5G SSB sensing project using a USRP B210 receiver and a 5G Ericsson DOT/cell.
 
-The current pipeline supports:
+This repository contains the code needed to run **Python-only online 5G sensing**, collect labeled SSB datasets, and deploy a PyTorch model that writes JSON outputs for a Digital Twin or any other external consumer.
 
-- MATLAB-based SSB capture.
-- Extraction of `dataSSB`.
-- Online extraction of `rxGridSSB`.
-- Python/PyTorch online inference.
-- JSON export.
-- SCP export to a remote machine for Digital Twin integration.
-- Initial preparation for a Python-only UHD/SSB implementation.
+The previous MATLAB workflow is kept only as historical/reference material. The recommended deployment path is now Python-only.
 
 ---
 
-## 1. Main project path
+## 1. Current recommended pipeline
 
-```bash
-cd ~/AlbertoDir/DT_sensing_fusion
-```
-
----
-
-## 2. Current online EMPTY/P5 inference
-
-The current binary model distinguishes:
+The current online sensing chain is:
 
 ```text
-EMPTY = no person
-P5    = person at position P5
+USRP B210
+  -> Python UHD IQ capture
+  -> CFO warmup/correction
+  -> PSS/NID2/timing detection
+  -> OFDM demodulation
+  -> dataSSB / rxGridSSB extraction
+  -> PyTorch model inference
+  -> local JSON
+  -> optional SCP to a remote Digital Twin machine
 ```
 
-Current online pipeline:
+Main online script:
 
 ```text
-MATLAB captures one valid SSB
-MATLAB extracts rxGridSSB = dataSSB(61:300, 2:5)
-MATLAB sends rxGridSSB to Python by TCP
-Python runs PyTorch inference
-Python applies temporal stabilization
-Python writes a local JSON
-Python sends the JSON to the remote Digital Twin machine by SCP
+src/python/ssb_python/online_5g_python_cfo_json_scp.py
 ```
 
-Run online inference:
+Current PyTorch model loader:
 
-```bash
-cd ~/AlbertoDir/DT_sensing_fusion
-
-./run_online_5g_binary_json_scp.sh
+```text
+src/python/ssb_python/rxgrid_torch_inference.py
 ```
 
-Short test:
+Current demo checkpoint:
 
-```bash
-cd ~/AlbertoDir/DT_sensing_fusion
+```text
+results/binary_empty_vs_P5_rx/model_rxGridSSB/model.pt
+```
 
-MAX_VALID_SSB=200 ./run_online_5g_binary_json_scp.sh
+Current dataset collection script:
+
+```text
+src/python/ssb_python/collect_labeled_rxgridssb_dataset_cfo.py
 ```
 
 ---
 
-## 3. Local and remote JSON
+## 2. What the current model does
 
-Local JSON:
+The included model is a **binary demonstration model** trained for the current lab setup:
 
-```bash
-results/online/live_inference_state_5G.json
-```
-
-Remote JSON:
-
-```bash
-nextnet@163.117.140.146:~/AlbertoDir/demo_5G/5G_inference/live_inference_state_5G.json
-```
-
-Check remote JSON once:
-
-```bash
-ssh nextnet@163.117.140.146 \
-  "cat ~/AlbertoDir/demo_5G/5G_inference/live_inference_state_5G.json"
-```
-
-Watch remote JSON from the local machine:
-
-```bash
-watch -n 0.5 "ssh nextnet@163.117.140.146 'cat ~/AlbertoDir/demo_5G/5G_inference/live_inference_state_5G.json'"
-```
-
----
-
-## 4. Dataset capture command
-
-Example:
-
-```bash
-matlab -batch "addpath('src/matlab'); collect_ssb_dataset('empty','static',30,'none','none',10)"
+```text
+empty vs P5
 ```
 
 Meaning:
 
 ```text
-label           = 'empty'
-movementState   = 'static'
-durationSeconds = 30
-personId        = 'none'
-orientation     = 'none'
-pauseBeforeSec  = 10
+empty = no target/person in the trained scene
+P5    = target/person at position P5 in the trained scene
 ```
 
-General format:
+Important: this model is **not a general human detector**.
 
-```bash
-matlab -batch "addpath('src/matlab'); collect_ssb_dataset('<label>','<movementState>',<durationSeconds>,'<personId>','<orientation>',<pauseBeforeSec>)"
-```
-
-Examples:
-
-```bash
-matlab -batch "addpath('src/matlab'); collect_ssb_dataset('empty','static',30,'none','none',10)"
-matlab -batch "addpath('src/matlab'); collect_ssb_dataset('P5','static',30,'person_1','sideways',10)"
-```
-
----
-
-## 5. Dataset block launcher
-
-```bash
-./run_datassb_block.sh empty 1 none datassb_side_v1_6labels 10000
-./run_datassb_block.sh P5 1 sideways datassb_side_v1_6labels 10000
-```
-
----
-
-## 6. Training binary model
-
-```bash
-cd ~/AlbertoDir/DT_sensing_fusion
-
-.venv/bin/python src/python/train_datassb_binary_pipeline.py \
-  --models rx \
-  --out-dir results/binary_empty_vs_P5_rx \
-  --skip-dataset-cache \
-  --epochs 20
-```
-
----
-
-## 7. Manual online execution
-
-Terminal 1: Python server.
-
-```bash
-cd ~/AlbertoDir/DT_sensing_fusion
-
-.venv/bin/python src/python/online_rxgridssb_inference_server.py
-```
-
-Terminal 2: MATLAB streamer.
-
-```bash
-cd ~/AlbertoDir/DT_sensing_fusion
-
-SEND_EVERY_N=1 \
-matlab -batch "run('src/matlab/stream_rxgridssb_online_to_python.m')"
-```
-
-Short test:
-
-```bash
-cd ~/AlbertoDir/DT_sensing_fusion
-
-MAX_VALID_SSB=100 \
-SEND_EVERY_N=1 \
-matlab -batch "run('src/matlab/stream_rxgridssb_online_to_python.m')"
-```
-
----
-
-## 8. UHD Python environment
-
-Python UHD capture is developed separately from the inference environment.
-
-Use:
-
-```bash
-source .venv_uhd/bin/activate
-```
-
-Check B210:
-
-```bash
-python - <<'PY'
-import uhd
-
-usrp = uhd.usrp.MultiUSRP("serial=34B73C3")
-print("USRP OK")
-print("RX channels:", usrp.get_rx_num_channels())
-print("Motherboard:", usrp.get_mboard_name())
-PY
-```
-
----
-
-## 9. Python UHD raw IQ capture
-
-The first Python-only migration step is implemented.
-
-Scripts:
+It is not expected to generalize automatically to:
 
 ```text
-src/python/ssb_python/test_capture_iq_uhd.py
-src/python/ssb_python/capture_iq_blocks_uhd.py
+a different factory
+a different antenna placement
+a different USRP/receiver position
+a different room or geometry
+a different set of target positions
+a different 5G source/cell configuration
+a different class set
 ```
 
-These scripts reproduce the raw SDR capture stage of the MATLAB pipeline:
+For a new deployment, the correct workflow is:
 
-```matlab
-waveform = capture(rx, captureDuration);
+```text
+1. Install the environment.
+2. Connect and test the USRP B210.
+3. Collect a new labeled dataset in the target environment.
+4. Train a new model using that dataset.
+5. Replace the checkpoint used by the online script.
+6. Run online inference with the new checkpoint.
 ```
 
-### 9.1. Single 20 ms IQ capture
+The included checkpoint is mainly useful to demonstrate that the full end-to-end pipeline works.
+
+---
+
+## 3. Which document should I read?
+
+### I want to deploy online 5G sensing on a new computer
+
+Read:
+
+```text
+README_5G_SSB_PYTHON_DEPLOYMENT.md
+```
+
+This is the main deployment guide. It explains:
+
+```text
+hardware setup
+fresh computer setup
+UHD/Python environment
+how to run online inference
+how to send JSON by SCP
+how to change the remote IP/path
+how to collect a labeled dataset
+how the dataset is stored
+how to replace the model
+```
+
+---
+
+### I want to run the current Python-only online inference
+
+Read:
+
+```text
+README_online_python_5g.md
+```
+
+Main script:
+
+```text
+src/python/ssb_python/online_5g_python_cfo_json_scp.py
+```
+
+Typical local test:
 
 ```bash
 cd ~/AlbertoDir/DT_sensing_fusion
 source .venv_uhd/bin/activate
 
-python src/python/ssb_python/test_capture_iq_uhd.py \
+python src/python/ssb_python/online_5g_python_cfo_json_scp.py \
   --serial 34B73C3 \
   --freq 3541.44e6 \
   --rate 15.36e6 \
   --gain 60 \
   --duration-ms 20 \
-  --channel 0
-```
-
-Expected output:
-
-```text
-waveform shape = (307200,)
-dtype = complex64
-```
-
-### 9.2. Repeated 20 ms IQ block capture
-
-```bash
-cd ~/AlbertoDir/DT_sensing_fusion
-source .venv_uhd/bin/activate
-
-python src/python/ssb_python/capture_iq_blocks_uhd.py \
-  --serial 34B73C3 \
-  --freq 3541.44e6 \
-  --rate 15.36e6 \
-  --gain 60 \
-  --duration-ms 20 \
-  --num-blocks 20 \
+  --num-iters 30 \
+  --warmup-iters 5 \
   --channel 0 \
+  --force-nid2 0 \
+  --enable-cfo-correction \
+  --cfo-warmup-iters 30 \
+  --cfo-correction-sign -1 \
+  --inference-backend torch \
+  --torch-model results/binary_empty_vs_P5_rx/model_rxGridSSB/model.pt \
+  --torch-device cpu \
+  --disable-scp \
   --progress-every 1
 ```
 
-Expected output:
+Local JSON output:
 
 ```text
-waveform shape = (20, 307200)
-dtype = complex64
+results/online/live_inference_state_5G.json
 ```
-
-The recommended initial gain for the Python port is:
-
-```text
-gain = 60 dB
-```
-
-Observed gain comparison during initial tests:
-
-```text
-gain=70:
-  sat_real_gt_0p99_percent_mean ≈ 0.65 %
-  sat_imag_gt_0p99_percent_mean ≈ 0.64 %
-
-gain=65:
-  sat_real_gt_0p99_percent_mean ≈ 0.57 %
-  sat_imag_gt_0p99_percent_mean ≈ 0.56 %
-
-gain=60:
-  sat_real_gt_0p99_percent_mean ≈ 0.42 %
-  sat_imag_gt_0p99_percent_mean ≈ 0.44 %
-```
-
-Captured IQ files are saved under `data/`, which is intentionally ignored by Git.
 
 ---
 
-## 10. Files intentionally not tracked by Git
+### I want to send the online JSON to another machine
 
-The repository does not track:
+Read:
 
 ```text
-.venv/
-.venv_uhd/
-.venv_datassb/
-data/
-logs/
-runtime/
-backups/
-large .mat captures
-large .h5 captures
-temporary online JSON files
+README_5G_SSB_PYTHON_DEPLOYMENT.md
 ```
 
-These files are local/generated artifacts and should be rebuilt or regenerated when needed.
+Use the `--remote-target` argument of:
+
+```text
+src/python/ssb_python/online_5g_python_cfo_json_scp.py
+```
+
+Example:
+
+```bash
+--remote-target "factoryuser@192.168.1.50:/home/factoryuser/dt/live_inference_state_5G.json"
+```
+
+The current demo target is:
+
+```text
+nextnet@163.117.140.146:~/AlbertoDir/demo_5G/5G_inference/live_inference_state_5G.json
+```
+
+If SCP is too slow, send less frequently:
+
+```bash
+--scp-every 3
+```
+
+or:
+
+```bash
+--scp-every 5
+```
+
+---
+
+### I want to collect a new labeled dataset
+
+Read:
+
+```text
+README_5G_SSB_PYTHON_DEPLOYMENT.md
+docs/DATASET_MODEL_JSON_GUIDE.md
+```
+
+Main script:
+
+```text
+src/python/ssb_python/collect_labeled_rxgridssb_dataset_cfo.py
+```
+
+Example for an empty scene:
+
+```bash
+cd ~/AlbertoDir/DT_sensing_fusion
+source .venv_uhd/bin/activate
+
+python src/python/ssb_python/collect_labeled_rxgridssb_dataset_cfo.py \
+  --label empty \
+  --scene static \
+  --person-id none \
+  --orientation none \
+  --prep-sec 10 \
+  --duration-sec 30 \
+  --serial 34B73C3 \
+  --freq 3541.44e6 \
+  --rate 15.36e6 \
+  --gain 60 \
+  --duration-ms 20 \
+  --channel 0 \
+  --force-nid2 0 \
+  --enable-cfo-correction \
+  --cfo-warmup-iters 30 \
+  --cfo-correction-sign -1 \
+  --output-root data/python_ssb_datasets
+```
+
+Example for a target at `P5`:
+
+```bash
+python src/python/ssb_python/collect_labeled_rxgridssb_dataset_cfo.py \
+  --label P5 \
+  --scene static \
+  --person-id person_1 \
+  --orientation sideways \
+  --prep-sec 10 \
+  --duration-sec 30 \
+  --serial 34B73C3 \
+  --freq 3541.44e6 \
+  --rate 15.36e6 \
+  --gain 60 \
+  --duration-ms 20 \
+  --channel 0 \
+  --force-nid2 0 \
+  --enable-cfo-correction \
+  --cfo-warmup-iters 30 \
+  --cfo-correction-sign -1 \
+  --output-root data/python_ssb_datasets
+```
+
+The script gives a preparation countdown before collection starts, so the operator can move to the target position.
+
+Dataset output folder:
+
+```text
+data/python_ssb_datasets/<label>/<session_id>/
+```
+
+Each session contains:
+
+```text
+session_data.h5
+metadata.json
+capture_log.csv
+```
+
+---
+
+### I want to understand the dataset format
+
+Read:
+
+```text
+docs/DATASET_MODEL_JSON_GUIDE.md
+```
+
+The key arrays are:
+
+```text
+dataSSB   = 360 x 6 x N
+rxGridSSB = 240 x 4 x N
+```
+
+The online model uses `rxGridSSB`.
+
+For one sample:
+
+```text
+rxGridSSB = 240 subcarriers x 4 OFDM symbols
+```
+
+For the current PyTorch model, this complex grid is converted to:
+
+```text
+[2, 240, 4]
+channel 0 = abs(rxGridSSB)
+channel 1 = angle(rxGridSSB)
+```
+
+---
+
+### I want to test a model on a saved dataset
+
+Read:
+
+```text
+docs/DATASET_MODEL_JSON_GUIDE.md
+```
+
+Main script:
+
+```text
+src/python/ssb_python/test_rxgrid_torch_checkpoint_on_h5.py
+```
+
+Example:
+
+```bash
+LAST_H5="$(find data/python_ssb_datasets -name session_data.h5 | sort | tail -n 1)"
+
+python src/python/ssb_python/test_rxgrid_torch_checkpoint_on_h5.py \
+  --model-pt results/binary_empty_vs_P5_rx/model_rxGridSSB/model.pt \
+  --input-h5 "$LAST_H5" \
+  --max-samples 30
+```
+
+---
+
+### I want to replace the model
+
+Read:
+
+```text
+README_5G_SSB_PYTHON_DEPLOYMENT.md
+docs/DATASET_MODEL_JSON_GUIDE.md
+```
+
+The online script accepts another checkpoint with:
+
+```bash
+--torch-model path/to/new/model.pt
+```
+
+Example:
+
+```bash
+python src/python/ssb_python/online_5g_python_cfo_json_scp.py \
+  ... \
+  --inference-backend torch \
+  --torch-model results/my_new_model/model.pt
+```
+
+The current loader expects a checkpoint containing:
+
+```text
+model_state_dict
+mean
+std
+input_shape = [2, 240, 4]
+complex_mode = abs_phase
+classes = [...]
+```
+
+If the new model uses the same architecture and input format, no code change is needed.
+
+If the new model uses a different architecture or different input channels, update:
+
+```text
+src/python/ssb_python/rxgrid_torch_inference.py
+```
+
+---
+
+### I want to inspect whether a captured dataset looks stable
+
+Read:
+
+```text
+docs/DATASET_MODEL_JSON_GUIDE.md
+```
+
+Main script:
+
+```text
+src/python/ssb_python/analyze_rxgrid_distributions.py
+```
+
+Example:
+
+```bash
+LAST_H5="$(find data/python_ssb_datasets -name session_data.h5 | sort | tail -n 1)"
+
+python src/python/ssb_python/analyze_rxgrid_distributions.py \
+  --input "$LAST_H5" \
+  --dataset rxGridSSB \
+  --label python_dataset
+```
+
+Useful plots include:
+
+```text
+amplitude histogram
+phase histogram
+IQ scatter
+mean amplitude heatmap
+mean amplitude by subcarrier
+mean amplitude by OFDM symbol
+```
+
+---
+
+### I want to compare with the old MATLAB reference
+
+This is not needed for normal deployment.
+
+For historical validation and comparison only, see:
+
+```text
+run_python_matlab_interleaved_capture.sh
+src/python/ssb_python/compare_interleaved_python_matlab.py
+```
+
+MATLAB was used during development to verify that the Python SSB extraction produced a consistent `rxGridSSB` representation. The current practical deployment path does not require MATLAB.
+
+---
+
+### I want the old MATLAB/TCP online notes
+
+Read:
+
+```text
+README_online_ssB_empty_p5.md
+```
+
+This is legacy documentation. It describes the previous online flow:
+
+```text
+MATLAB capture
+MATLAB rxGridSSB extraction
+TCP to Python
+Python inference
+JSON/SCP
+```
+
+This flow is kept for reference, but it is no longer the recommended deployment path.
+
+---
+
+## 4. Main scripts overview
+
+| Script | Purpose |
+|---|---|
+| `src/python/ssb_python/online_5g_python_cfo_json_scp.py` | Full Python online inference, JSON output, optional SCP |
+| `src/python/ssb_python/rxgrid_torch_inference.py` | Loads the PyTorch `.pt` checkpoint and runs inference |
+| `src/python/ssb_python/collect_labeled_rxgridssb_dataset_cfo.py` | Operator-friendly labeled dataset collection |
+| `src/python/ssb_python/capture_online_rxgridssb_dataset_cfo.py` | Lower-level CFO-corrected online dataset capture |
+| `src/python/ssb_python/test_rxgrid_torch_checkpoint_on_h5.py` | Tests a model checkpoint on a saved H5 dataset |
+| `src/python/ssb_python/analyze_rxgrid_distributions.py` | Plots amplitude/phase statistics for saved datasets |
+| `src/python/ssb_python/capture_iq_blocks_uhd.py` | Raw IQ capture for low-level debugging |
+| `src/python/ssb_python/compare_interleaved_python_matlab.py` | Historical Python/MATLAB comparison tool |
+
+---
+
+## 5. Recommended new-factory workflow
+
+For a new factory or deployment scenario:
+
+```text
+1. Clone the repository on the target computer.
+2. Install UHD and create the Python UHD environment.
+3. Connect the USRP B210 and verify that UHD detects it.
+4. Adjust USRP parameters if needed:
+   frequency, sample rate, gain, channel, NID2.
+5. Decide the target classes:
+   empty, P1, P2, P3, person, no_person, etc.
+6. Collect labeled datasets with collect_labeled_rxgridssb_dataset_cfo.py.
+7. Inspect the datasets with analyze_rxgrid_distributions.py.
+8. Train a new model using the collected Python rxGridSSB datasets.
+9. Save the model checkpoint in the expected format.
+10. Run online_5g_python_cfo_json_scp.py with --torch-model pointing to the new checkpoint.
+11. Set --remote-target to the desired Digital Twin or external machine.
+12. Validate that the receiver of the JSON reads the expected fields.
+```
+
+---
+
+## 6. Git policy
+
+Do not commit generated datasets or runtime outputs:
+
+```text
+data/python_ssb_datasets/
+results/online/
+results/python_online_rxgridssb_dataset_cfo/
+results/python_rxgrid_distribution/
+logs/
+```
+
+Commit code, configurations, documentation, and small demonstration assets only.
+
+The current small demo model checkpoint is kept in the repository for demonstration:
+
+```text
+results/binary_empty_vs_P5_rx/model_rxGridSSB/model.pt
+```
+
+---
+
+## 7. Quick links
+
+| Goal | Read this |
+|---|---|
+| Deploy from a new computer | `README_5G_SSB_PYTHON_DEPLOYMENT.md` |
+| Run Python-only online inference | `README_online_python_5g.md` |
+| Understand dataset/model/JSON format | `docs/DATASET_MODEL_JSON_GUIDE.md` |
+| Run step-by-step commands | `docs/RUNBOOK_PYTHON_ONLINE_5G.md` |
+| Historical MATLAB/TCP notes | `README_online_ssB_empty_p5.md` |
