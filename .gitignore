@@ -49,3 +49,27 @@ notasImplementacionMIAS
 results/online/
 results/online_rxgridssb_inference_log.csv
 online_rxgridssb_multiclass_log.csv
+
+# External MATLAB/NR example code and local backups
+NRSSBCaptureUsingSDRExample-20260619T104542Z-3-001/
+bk_28may_XIAOMI_RASPI/
+
+# Local trained models / alternative experiments
+models/
+reports/
+
+# Ignore all new result folders by default.
+# The current EMPTY/P5 rxGridSSB result folder is already tracked selectively.
+results/binary_empty_vs_P5/
+results/binary_empty_vs_P5_codex_check/
+results/binary_empty_vs_P5_codex_rx_check/
+results/binary_empty_vs_P5_codex_train_smoke/
+results/binary_empty_vs_P5_h/
+results/binary_empty_vs_P5_raw_group3/
+results/long_doppler/
+results/motion_doppler/
+results/multiclass_empty_P5_P3_rx/
+results/multiclass_empty_P5_P3_rx_hybrid_roi/
+results/multiclass_empty_P5_P3_rx_hybrid_roi_wP5/
+results/multiclass_empty_P5_P3_rx_roi_abs/
+results/p5_signature_override_check/
