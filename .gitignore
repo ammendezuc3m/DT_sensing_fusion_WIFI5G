@@ -76,3 +76,7 @@ results/p5_signature_override_check/
 
 # Generated Python IQ inspection results
 results/python_iq_inspection/
+
+# Generated Python DSP prototype results
+results/python_iq_inspection/
+results/python_pss_detection/
