@@ -80,3 +80,6 @@ results/python_iq_inspection/
 # Generated Python DSP prototype results
 results/python_iq_inspection/
 results/python_pss_detection/
+
+# Generated Python dataSSB extraction results
+results/python_datassb_extract/
