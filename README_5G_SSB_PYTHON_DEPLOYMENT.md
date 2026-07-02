@@ -401,7 +401,7 @@ Create the remote folder:
 
 ```bash
 ssh <user>@<ip-or-hostname> \
-  "mkdir -p demo_5G/5G_inference"
+  "mkdir -p <remote/path>"
 ```
 
 Run the pipeline with SCP enabled:
@@ -425,7 +425,7 @@ python src/python/ssb_python/online_5g_python_cfo_json_scp.py \
   --inference-backend torch \
   --torch-model results/binary_empty_vs_P5_rx/model_rxGridSSB/model.pt \
   --torch-device cpu \
-  --remote-target "<remote/path/live_inference_state_5G.json>" \
+  --remote-target "<user>@<ip-or-hostname>:<remote/path/live_inference_state_5G.json>" \
   --scp-every 1 \
   --progress-every 1
 ```
@@ -443,13 +443,13 @@ watch -n 0.5 "ssh <user>@<ip-or-hostname> 'cat <remote/path/live_inference_state
 Example:
 
 ```bash
---remote-target "factoryuser@192.168.1.50:/home/factoryuser/dt/live_inference_state_5G.json"
+--remote-target "<user>@<ip-or-hostname>:<remote/path/live_inference_state_5G.json>"
 ```
 
 Make sure SSH works first:
 
 ```bash
-ssh factoryuser@192.168.1.50
+ssh <user>@<ip-or-hostname>
 ```
 
 If SCP is too slow, send less frequently:
@@ -783,3 +783,224 @@ The small demo checkpoint may be committed if needed for demonstration:
 ```text
 results/binary_empty_vs_P5_rx/model_rxGridSSB/model.pt
 ```
+
+---
+
+## 16. Coordinates and Mitsuba/Sionna XML export
+
+The online inference script can export two synchronized outputs:
+
+```text
+1. JSON inference state
+2. Mitsuba XML scene for Sionna/ray-tracing workflows
+```
+
+The JSON remains the main state interface. The Mitsuba XML is generated from the same prediction and the same position coordinates.
+
+Main script:
+
+```text
+src/python/ssb_python/online_5g_python_cfo_json_scp.py
+```
+
+Position map:
+
+```text
+config/sionna_mitsuba_position_map.json
+```
+
+Local outputs:
+
+```text
+results/online/live_inference_state_5G.json
+results/online/live_person_sionna_scene.xml
+```
+
+### 16.1 Position coordinates
+
+The current map is stored in:
+
+```text
+config/sionna_mitsuba_position_map.json
+```
+
+Current coordinates are derived from the deployment grid:
+
+```json
+{
+  "P1": {"translation_m": [6.0, 7.0, 0.0], "yaw_deg": 0.0},
+  "P2": {"translation_m": [6.0, 5.0, 0.0], "yaw_deg": 0.0},
+  "P3": {"translation_m": [4.0, 7.0, 0.0], "yaw_deg": 0.0},
+  "P4": {"translation_m": [3.0, 5.0, 0.0], "yaw_deg": 0.0},
+  "P5": {"translation_m": [2.0, 6.0, 0.0], "yaw_deg": 0.0}
+}
+```
+
+Coordinate convention:
+
+```text
+x_m = top grid label
+y_m = left grid label
+z_m = floor height
+```
+
+If the Sionna scene uses another origin, scale, or axis convention, update this JSON file.
+
+### 16.2 Local run with JSON + XML
+
+```bash
+cd DT_sensing_fusion
+source .venv_uhd/bin/activate
+
+python src/python/ssb_python/online_5g_python_cfo_json_scp.py \
+  --serial 34B73C3 \
+  --freq 3541.44e6 \
+  --rate 15.36e6 \
+  --gain 60 \
+  --duration-ms 20 \
+  --num-iters 30 \
+  --warmup-iters 5 \
+  --channel 0 \
+  --force-nid2 0 \
+  --enable-cfo-correction \
+  --cfo-warmup-iters 30 \
+  --cfo-correction-sign -1 \
+  --inference-backend torch \
+  --torch-model results/binary_empty_vs_P5_rx/model_rxGridSSB/model.pt \
+  --torch-device cpu \
+  --mitsuba-position-map-json config/sionna_mitsuba_position_map.json \
+  --enable-mitsuba-export \
+  --disable-scp \
+  --progress-every 1
+```
+
+Generated files:
+
+```text
+results/online/live_inference_state_5G.json
+results/online/live_person_sionna_scene.xml
+```
+
+### 16.3 Send JSON and XML by SCP
+
+Use the `--remote-target` argument for the JSON:
+
+```bash
+--remote-target "<user>@<ip-or-hostname>:<remote/path/live_inference_state_5G.json>"
+```
+
+Enable XML export with:
+
+```bash
+--enable-mitsuba-export
+```
+
+If `--remote-target` is provided for the JSON and no explicit XML target is provided, the XML is automatically sent to the same remote directory using the default filename:
+
+```text
+live_person_sionna_scene.xml
+```
+
+Example:
+
+```bash
+python src/python/ssb_python/online_5g_python_cfo_json_scp.py \
+  --serial 34B73C3 \
+  --freq 3541.44e6 \
+  --rate 15.36e6 \
+  --gain 60 \
+  --duration-ms 20 \
+  --warmup-iters 5 \
+  --channel 0 \
+  --force-nid2 0 \
+  --enable-cfo-correction \
+  --cfo-warmup-iters 30 \
+  --cfo-correction-sign -1 \
+  --inference-backend torch \
+  --torch-model results/binary_empty_vs_P5_rx/model_rxGridSSB/model.pt \
+  --torch-device cpu \
+  --mitsuba-position-map-json config/sionna_mitsuba_position_map.json \
+  --enable-mitsuba-export \
+  --remote-target "<user>@<ip-or-hostname>:<remote/path/live_inference_state_5G.json>" \
+  --progress-every 1
+```
+
+This sends:
+
+```text
+<user>@<ip-or-hostname>:<remote/path/live_inference_state_5G.json>
+<user>@<ip-or-hostname>:<remote/path/live_person_sionna_scene.xml>
+```
+
+To use a custom XML destination, provide:
+
+```bash
+--mitsuba-scp-target "<user>@<ip-or-hostname>:<remote/path/custom_person_scene.xml>"
+```
+
+Check the remote files:
+
+```bash
+ssh <user>@<ip-or-hostname> \
+  "ls -lh <remote/path/live_inference_state_5G.json> <remote/path/live_person_sionna_scene.xml>"
+```
+
+### 16.4 JSON coordinates
+
+For a `P5` prediction, the JSON contains:
+
+```json
+"coordinates": {
+  "available": true,
+  "frame": "map_grid_m",
+  "label": "P5",
+  "translation_m": [2.0, 6.0, 0.0],
+  "x_m": 2.0,
+  "y_m": 6.0,
+  "z_m": 0.0,
+  "yaw_deg": 0.0
+}
+```
+
+### 16.5 Mitsuba XML
+
+For a `P5` prediction, the XML contains a standard human proxy placed at the same coordinates:
+
+```xml
+<shape type="sphere" id="person_P5_body">
+    <transform name="to_world">
+        <translate value="2,6,0.92"/>
+        <scale value="0.28,0.18,0.62"/>
+    </transform>
+    <ref id="human_body_standard"/>
+</shape>
+
+<shape type="sphere" id="person_P5_head">
+    <transform name="to_world">
+        <translate value="2,6,1.62"/>
+        <scale value="0.12,0.12,0.12"/>
+    </transform>
+    <ref id="human_body_standard"/>
+</shape>
+```
+
+The XML is a Mitsuba-compatible scene file using standard scene elements such as:
+
+```text
+scene
+shape
+transform
+translate
+scale
+bsdf
+```
+
+### 16.6 Radio material metadata
+
+The XML includes radio-material metadata as comments:
+
+```xml
+<!--SIONNA_RADIO_MATERIAL name=human_body_standard relative_permittivity=38 relative_permeability=1 conductivity_s_per_m=1.46 frequency_hz=3.54144e+09-->
+```
+
+These values are placeholders. For accurate Sionna ray tracing, replace them with validated parameters for the target frequency and human/body material model.

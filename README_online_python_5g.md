@@ -16,6 +16,7 @@ USRP B210
   -> rxGridSSB = 240 x 4
   -> PyTorch binary classifier (.pt)
   -> local JSON
+  -> optional Mitsuba/Sionna XML
   -> optional SCP to the Digital Twin machine
 ```
 
@@ -63,7 +64,7 @@ channel 1 = angle(rxGridSSB)
 Activate the UHD environment:
 
 ```bash
-cd ~/AlbertoDir/DT_sensing_fusion
+cd DT_sensing_fusion
 source .venv_uhd/bin/activate
 ```
 
@@ -98,7 +99,7 @@ python -m pip install torch
 ## Short local test without SCP
 
 ```bash
-cd ~/AlbertoDir/DT_sensing_fusion
+cd DT_sensing_fusion
 source .venv_uhd/bin/activate
 
 python src/python/ssb_python/online_5g_python_cfo_json_scp.py \
@@ -132,14 +133,14 @@ cat results/online/live_inference_state_5G.json
 Prepare the remote directory:
 
 ```bash
-ssh nextnet@163.117.140.146 \
-  "mkdir -p ~/AlbertoDir/demo_5G/5G_inference"
+ssh <user>@<ip-or-hostname> \
+  "mkdir -p <remote/path>"
 ```
 
 Run:
 
 ```bash
-cd ~/AlbertoDir/DT_sensing_fusion
+cd DT_sensing_fusion
 source .venv_uhd/bin/activate
 
 python src/python/ssb_python/online_5g_python_cfo_json_scp.py \
@@ -157,7 +158,7 @@ python src/python/ssb_python/online_5g_python_cfo_json_scp.py \
   --inference-backend torch \
   --torch-model results/binary_empty_vs_P5_rx/model_rxGridSSB/model.pt \
   --torch-device cpu \
-  --remote-target "nextnet@163.117.140.146:~/AlbertoDir/demo_5G/5G_inference/live_inference_state_5G.json" \
+  --remote-target "<user>@<ip-or-hostname>:<remote/path/live_inference_state_5G.json>" \
   --scp-every 1 \
   --progress-every 1
 ```
@@ -165,7 +166,7 @@ python src/python/ssb_python/online_5g_python_cfo_json_scp.py \
 Watch the remote JSON:
 
 ```bash
-watch -n 0.5 "ssh nextnet@163.117.140.146 'cat ~/AlbertoDir/demo_5G/5G_inference/live_inference_state_5G.json'"
+watch -n 0.5 "ssh <user>@<ip-or-hostname> 'cat <remote/path/live_inference_state_5G.json>'"
 ```
 
 If SCP is too slow, use:
@@ -178,6 +179,28 @@ or:
 
 ```bash
 --scp-every 5
+```
+
+## Optional Mitsuba/Sionna XML export
+
+To generate the XML scene as well, add:
+
+```bash
+--mitsuba-position-map-json config/sionna_mitsuba_position_map.json \
+--enable-mitsuba-export
+```
+
+If SCP is enabled through `--remote-target`, the XML is sent automatically to the same remote directory as:
+
+```text
+live_person_sionna_scene.xml
+```
+
+Example target pair:
+
+```text
+<user>@<ip-or-hostname>:<remote/path/live_inference_state_5G.json>
+<user>@<ip-or-hostname>:<remote/path/live_person_sionna_scene.xml>
 ```
 
 ## CFO behavior

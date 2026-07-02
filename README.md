@@ -168,7 +168,7 @@ Local JSON output:
 results/online/live_inference_state_5G.json
 ```
 
-Local Mitsuba File output:
+Local Mitsuba XML output:
 
 ```text
 results/online/live_person_sionna_scene.xml
@@ -201,7 +201,7 @@ live_person_sionna_scene.xml
 Example:
 
 ```bash
---remote-target "factoryuser@192.168.1.50:/home/factoryuser/dt/live_inference_state_5G.json"
+--remote-target "<user>@<ip-or-hostname>:<remote/path/live_inference_state_5G.json>"
 ```
 
 ---
@@ -224,7 +224,7 @@ src/python/ssb_python/collect_labeled_rxgridssb_dataset_cfo.py
 Example for an empty scene:
 
 ```bash
-cd ~/AlbertoDir/DT_sensing_fusion
+cd DT_sensing_fusion
 source .venv_uhd/bin/activate
 
 python src/python/ssb_python/collect_labeled_rxgridssb_dataset_cfo.py \

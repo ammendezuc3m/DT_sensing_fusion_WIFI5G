@@ -16,7 +16,7 @@ P5    = person at position P5
 The recommended online launcher is:
 
 ```bash
-cd ~/AlbertoDir/DT_sensing_fusion
+cd DT_sensing_fusion
 
 ./run_online_5g_binary_json_scp.sh
 ```
@@ -103,14 +103,14 @@ results/online/live_inference_state_5G.json
 
 Remote:
 
-```bash
-nextnet@163.117.140.146:~/AlbertoDir/demo_5G/5G_inference/live_inference_state_5G.json
+```text
+<user>@<ip-or-hostname>:<remote/path/live_inference_state_5G.json>
 ```
 
 Check remote:
 
 ```bash
-watch -n 0.5 "ssh nextnet@163.117.140.146 'cat ~/AlbertoDir/demo_5G/5G_inference/live_inference_state_5G.json'"
+watch -n 0.5 "ssh <user>@<ip-or-hostname> 'cat <remote/path/live_inference_state_5G.json>'"
 ```
 
 ---
