@@ -30,6 +30,8 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from xml.dom import minidom
+from xml.etree import ElementTree as ET
 
 import numpy as np
 
@@ -102,6 +104,60 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--disable-scp", action="store_true")
     p.add_argument("--scp-timeout-sec", type=float, default=3.0)
 
+    # Mitsuba/Sionna XML export.
+    p.add_argument(
+        "--enable-mitsuba-export",
+        action="store_true",
+        help="Also export the current JSON inference state as a Mitsuba XML scene.",
+    )
+    p.add_argument(
+        "--mitsuba-output",
+        default="",
+        help=(
+            "Local Mitsuba XML output path. If empty, it is written next to "
+            "--local-json using --mitsuba-filename."
+        ),
+    )
+    p.add_argument(
+        "--mitsuba-filename",
+        default="live_person_sionna_scene.xml",
+        help="Mitsuba XML filename used for local/remote default paths.",
+    )
+    p.add_argument(
+        "--mitsuba-scp-target",
+        default="",
+        help=(
+            "Optional explicit SCP target for the Mitsuba XML. If empty and "
+            "JSON SCP is enabled, the XML is sent to the same remote directory "
+            "as --remote-target."
+        ),
+    )
+    p.add_argument("--mitsuba-every", type=int, default=1)
+
+    # Standard human proxy geometry, in meters.
+    p.add_argument("--mitsuba-human-height-m", type=float, default=1.75)
+    p.add_argument("--mitsuba-body-radius-x-m", type=float, default=0.28)
+    p.add_argument("--mitsuba-body-radius-y-m", type=float, default=0.18)
+    p.add_argument("--mitsuba-body-half-height-m", type=float, default=0.62)
+    p.add_argument("--mitsuba-body-center-z-m", type=float, default=0.92)
+    p.add_argument("--mitsuba-head-radius-m", type=float, default=0.12)
+    p.add_argument("--mitsuba-head-center-z-m", type=float, default=1.62)
+
+    # Standard human radio material metadata for Sionna mapping.
+    p.add_argument("--mitsuba-human-material-name", default="human_body_standard")
+    p.add_argument("--mitsuba-human-epsilon-r", type=float, default=38.0)
+    p.add_argument("--mitsuba-human-mu-r", type=float, default=1.0)
+    p.add_argument("--mitsuba-human-conductivity-s-per-m", type=float, default=1.46)
+
+    # Optional JSON map: {"P5": {"translation_m": [x,y,z], "yaw_deg": 0.0}, ...}
+    p.add_argument(
+        "--mitsuba-position-map-json",
+        "--position-map-json",
+        dest="mitsuba_position_map_json",
+        default="",
+        help="JSON file mapping labels such as P1/P5 to Mitsuba/Sionna coordinates.",
+    )
+
     return p.parse_args()
 
 
@@ -135,6 +191,231 @@ def run_scp(local_path: Path, remote_target: str, timeout_sec: float) -> tuple[b
         return False, "scp_timeout"
     except Exception as exc:
         return False, str(exc)
+
+
+
+def atomic_write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.replace(path)
+
+
+def resolve_mitsuba_output_path(args: argparse.Namespace, local_json: Path) -> Path:
+    if args.mitsuba_output:
+        return Path(args.mitsuba_output)
+    return local_json.with_name(args.mitsuba_filename)
+
+
+def derive_remote_target_same_dir(remote_target: str, filename: str) -> str:
+    """
+    Convert:
+        user@host:/some/path/live_inference_state_5G.json
+    into:
+        user@host:/some/path/<filename>
+
+    If the path already ends in '/', append <filename>.
+    """
+    if not remote_target:
+        return ""
+
+    if ":" not in remote_target:
+        return ""
+
+    prefix, remote_path = remote_target.rsplit(":", 1)
+
+    if remote_path.endswith("/"):
+        return f"{prefix}:{remote_path}{filename}"
+
+    if "/" not in remote_path:
+        return f"{prefix}:{filename}"
+
+    remote_dir = remote_path.rsplit("/", 1)[0]
+    return f"{prefix}:{remote_dir}/{filename}"
+
+
+def resolve_mitsuba_remote_target(args: argparse.Namespace) -> str:
+    if args.mitsuba_scp_target:
+        return args.mitsuba_scp_target
+
+    if args.disable_scp or not args.remote_target:
+        return ""
+
+    return derive_remote_target_same_dir(args.remote_target, args.mitsuba_filename)
+
+
+def load_mitsuba_position_map(path: str) -> dict:
+    if not path:
+        return {}
+
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"Mitsuba position map not found: {p}")
+
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+def get_default_position_map() -> dict:
+    """
+    Default placeholder coordinates.
+
+    These are not universal. Replace them using --mitsuba-position-map-json
+    for the real Sionna coordinate system.
+    """
+    return {
+        "P1": {"translation_m": [0.0, 0.0, 0.0], "yaw_deg": 0.0},
+        "P2": {"translation_m": [1.0, 0.0, 0.0], "yaw_deg": 0.0},
+        "P3": {"translation_m": [2.0, 0.0, 0.0], "yaw_deg": 0.0},
+        "P4": {"translation_m": [3.0, 0.0, 0.0], "yaw_deg": 0.0},
+        "P5": {"translation_m": [4.0, 0.0, 0.0], "yaw_deg": 0.0},
+    }
+
+
+def fstr(x: float) -> str:
+    return f"{float(x):.9g}"
+
+
+def vec3(values) -> str:
+    return ",".join(fstr(float(v)) for v in values)
+
+
+def add_transform(parent: ET.Element, translation, yaw_deg: float, scale) -> None:
+    transform = ET.SubElement(parent, "transform", {"name": "to_world"})
+    ET.SubElement(transform, "translate", {"value": vec3(translation)})
+
+    if abs(float(yaw_deg)) > 1e-9:
+        ET.SubElement(transform, "rotate", {"z": "1", "angle": fstr(yaw_deg)})
+
+    ET.SubElement(transform, "scale", {"value": vec3(scale)})
+
+
+def prettify_xml(root: ET.Element) -> str:
+    raw = ET.tostring(root, encoding="utf-8")
+    parsed = minidom.parseString(raw)
+    return parsed.toprettyxml(indent="    ")
+
+
+def make_mitsuba_scene_xml(
+    payload: dict,
+    args: argparse.Namespace,
+    position_map: dict,
+) -> str:
+    """
+    Convert one online JSON payload to a Mitsuba XML scene.
+
+    The XML is intentionally simple:
+        - scene root
+        - one material id
+        - optional human proxy made of body/head spheres
+
+    Radio material parameters are stored as XML comments because plain Mitsuba
+    BSDF plugins do not directly encode Sionna radio material conductivity.
+    Sionna-side code should map material id 'human_body_standard' to a
+    RadioMaterial using these values.
+    """
+    scene = ET.Element("scene", {"version": "3.0.0"})
+
+    label = str(payload.get("position") or payload.get("label") or payload.get("prediction") or "none")
+    valid = bool(payload.get("valid", False))
+    person_detected = bool(payload.get("person_detected", False))
+    confidence = float(payload.get("confidence", 0.0))
+
+    scene.append(ET.Comment("Generated from online_5g_python_cfo_json_scp.py"))
+    scene.append(ET.Comment(f"timestamp_utc={payload.get('timestamp_utc', '')}"))
+    scene.append(ET.Comment(f"label={label}"))
+    scene.append(ET.Comment(f"valid={valid}"))
+    scene.append(ET.Comment(f"person_detected={person_detected}"))
+    scene.append(ET.Comment(f"confidence={confidence:.9g}"))
+
+    material_name = args.mitsuba_human_material_name
+    epsilon_r = float(args.mitsuba_human_epsilon_r)
+    mu_r = float(args.mitsuba_human_mu_r)
+    sigma = float(args.mitsuba_human_conductivity_s_per_m)
+    frequency_hz = float(args.freq)
+
+    scene.append(
+        ET.Comment(
+            "SIONNA_RADIO_MATERIAL "
+            f"name={material_name} "
+            f"relative_permittivity={epsilon_r:.9g} "
+            f"relative_permeability={mu_r:.9g} "
+            f"conductivity_s_per_m={sigma:.9g} "
+            f"frequency_hz={frequency_hz:.9g}"
+        )
+    )
+
+    # Mitsuba-valid visual/placeholder BSDF. The radio material values above
+    # should be used by Sionna-side material mapping.
+    bsdf = ET.SubElement(scene, "bsdf", {"type": "diffuse", "id": material_name})
+    ET.SubElement(bsdf, "rgb", {"name": "reflectance", "value": "0.65,0.44,0.36"})
+
+    empty_labels = {"empty", "EMPTY", "none", "None", "INVALID", "NO_PERSON", "no_person"}
+
+    if not valid or not person_detected or label in empty_labels:
+        scene.append(ET.Comment("No human shape exported because the current state is empty/invalid."))
+        return prettify_xml(scene)
+
+    merged_position_map = get_default_position_map()
+    merged_position_map.update(position_map)
+
+    pos_cfg = merged_position_map.get(label, {"translation_m": [0.0, 0.0, 0.0], "yaw_deg": 0.0})
+    base = [float(v) for v in pos_cfg.get("translation_m", [0.0, 0.0, 0.0])]
+    yaw_deg = float(pos_cfg.get("yaw_deg", 0.0))
+
+    safe_label = "".join(ch if ch.isalnum() or ch in ["_", "-"] else "_" for ch in label)
+
+    # Body ellipsoid.
+    body_center = [
+        base[0],
+        base[1],
+        base[2] + float(args.mitsuba_body_center_z_m),
+    ]
+    body_shape = ET.SubElement(scene, "shape", {"type": "sphere", "id": f"person_{safe_label}_body"})
+    add_transform(
+        body_shape,
+        translation=body_center,
+        yaw_deg=yaw_deg,
+        scale=[
+            float(args.mitsuba_body_radius_x_m),
+            float(args.mitsuba_body_radius_y_m),
+            float(args.mitsuba_body_half_height_m),
+        ],
+    )
+    ET.SubElement(body_shape, "ref", {"id": material_name})
+
+    # Head sphere.
+    head_center = [
+        base[0],
+        base[1],
+        base[2] + float(args.mitsuba_head_center_z_m),
+    ]
+    head_shape = ET.SubElement(scene, "shape", {"type": "sphere", "id": f"person_{safe_label}_head"})
+    add_transform(
+        head_shape,
+        translation=head_center,
+        yaw_deg=yaw_deg,
+        scale=[
+            float(args.mitsuba_head_radius_m),
+            float(args.mitsuba_head_radius_m),
+            float(args.mitsuba_head_radius_m),
+        ],
+    )
+    ET.SubElement(head_shape, "ref", {"id": material_name})
+
+    return prettify_xml(scene)
+
+
+def write_mitsuba_scene_from_payload(
+    payload: dict,
+    args: argparse.Namespace,
+    local_json: Path,
+    position_map: dict,
+) -> Path:
+    output_xml = resolve_mitsuba_output_path(args, local_json)
+    xml = make_mitsuba_scene_xml(payload, args, position_map)
+    atomic_write_text(output_xml, xml)
+    return output_xml
+
 
 
 def load_threshold_model(path: Path, label_empty: str, label_person: str) -> dict:
@@ -300,6 +581,10 @@ def main() -> None:
     log_csv = Path(args.log_csv)
     log_csv.parent.mkdir(parents=True, exist_ok=True)
 
+    mitsuba_xml = resolve_mitsuba_output_path(args, local_json)
+    mitsuba_remote_target = resolve_mitsuba_remote_target(args)
+    mitsuba_position_map = load_mitsuba_position_map(args.mitsuba_position_map_json)
+
     model = load_threshold_model(Path(args.model_config), args.label_empty, args.label_person)
     torch_model = None
     if args.inference_backend == "torch":
@@ -322,6 +607,9 @@ def main() -> None:
         print(f"torch model:        {args.torch_model}")
     print(f"local JSON:         {local_json}")
     print(f"remote target:      {args.remote_target if not args.disable_scp else 'SCP disabled'}")
+    print(f"mitsuba export:     {mitsuba_xml if args.enable_mitsuba_export else 'disabled'}")
+    if args.enable_mitsuba_export:
+        print(f"mitsuba remote:     {mitsuba_remote_target if mitsuba_remote_target else 'disabled'}")
 
     usrp = configure_usrp(args)
     actual_rate = float(usrp.get_rx_rate(args.channel))
@@ -367,6 +655,8 @@ def main() -> None:
         "dsp_time_ms",
         "loop_time_ms",
         "scp_ok",
+        "mitsuba_xml",
+        "mitsuba_scp_ok",
         "error",
     ]
 
@@ -392,6 +682,9 @@ def main() -> None:
             capture_time_ms = float("nan")
             scp_ok = False
             scp_error = ""
+            mitsuba_xml_path = ""
+            mitsuba_scp_ok = False
+            mitsuba_scp_error = ""
 
             try:
                 cap_t0 = time.perf_counter()
@@ -478,6 +771,33 @@ def main() -> None:
                     error=error,
                 )
 
+                if args.enable_mitsuba_export and i % args.mitsuba_every == 0:
+                    payload["mitsuba"] = {
+                        "enabled": True,
+                        "local_xml": str(mitsuba_xml),
+                        "remote_target": mitsuba_remote_target,
+                        "material_name": args.mitsuba_human_material_name,
+                        "relative_permittivity": float(args.mitsuba_human_epsilon_r),
+                        "relative_permeability": float(args.mitsuba_human_mu_r),
+                        "conductivity_s_per_m": float(args.mitsuba_human_conductivity_s_per_m),
+                        "frequency_hz": float(args.freq),
+                    }
+
+                    written_xml = write_mitsuba_scene_from_payload(
+                        payload=payload,
+                        args=args,
+                        local_json=local_json,
+                        position_map=mitsuba_position_map,
+                    )
+                    mitsuba_xml_path = str(written_xml)
+
+                    if not args.disable_scp and mitsuba_remote_target:
+                        mitsuba_scp_ok, mitsuba_scp_error = run_scp(
+                            written_xml,
+                            mitsuba_remote_target,
+                            args.scp_timeout_sec,
+                        )
+
                 atomic_write_json(local_json, payload)
 
                 if not args.disable_scp and args.remote_target and i % args.scp_every == 0:
@@ -504,7 +824,9 @@ def main() -> None:
                 "dsp_time_ms": timing_breakdown.get("total_dsp_time_ms", np.nan),
                 "loop_time_ms": loop_time_ms,
                 "scp_ok": int(scp_ok),
-                "error": error or scp_error,
+                "mitsuba_xml": mitsuba_xml_path,
+                "mitsuba_scp_ok": int(mitsuba_scp_ok),
+                "error": error or scp_error or mitsuba_scp_error,
             }
 
             writer.writerow(row)
@@ -520,7 +842,9 @@ def main() -> None:
                     f"pss={float(row['pss_metric']) if np.isfinite(row['pss_metric']) else float('nan'):.3f} "
                     f"loop={loop_time_ms:.2f} ms "
                     f"scp={int(scp_ok)} "
-                    f"err={error or scp_error}"
+                    f"mitsuba={int(bool(mitsuba_xml_path))} "
+                    f"mitsuba_scp={int(mitsuba_scp_ok)} "
+                    f"err={error or scp_error or mitsuba_scp_error}"
                 )
 
             i += 1
