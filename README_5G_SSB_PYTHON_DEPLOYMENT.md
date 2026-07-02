@@ -189,7 +189,7 @@ uhd_usrp_probe
 This environment uses `--system-site-packages` so that Python can see the UHD Python bindings installed by the OS.
 
 ```bash
-cd ~/AlbertoDir/DT_sensing_fusion
+cd DT_sensing_fusion
 
 python3 -m venv --system-site-packages .venv_uhd
 source .venv_uhd/bin/activate
@@ -343,7 +343,7 @@ Use this only for low-level debugging. It saves raw IQ blocks before SSB extract
 Activate the environment:
 
 ```bash
-cd ~/AlbertoDir/DT_sensing_fusion
+cd DT_sensing_fusion
 source .venv_uhd/bin/activate
 ```
 
@@ -400,14 +400,14 @@ cat results/online/live_inference_state_5G.json
 Create the remote folder:
 
 ```bash
-ssh nextnet@163.117.140.146 \
-  "mkdir -p ~/AlbertoDir/demo_5G/5G_inference"
+ssh <user>@<ip-or-hostname> \
+  "mkdir -p demo_5G/5G_inference"
 ```
 
 Run the pipeline with SCP enabled:
 
 ```bash
-cd ~/AlbertoDir/DT_sensing_fusion
+cd DT_sensing_fusion
 source .venv_uhd/bin/activate
 
 python src/python/ssb_python/online_5g_python_cfo_json_scp.py \
@@ -425,7 +425,7 @@ python src/python/ssb_python/online_5g_python_cfo_json_scp.py \
   --inference-backend torch \
   --torch-model results/binary_empty_vs_P5_rx/model_rxGridSSB/model.pt \
   --torch-device cpu \
-  --remote-target "nextnet@163.117.140.146:~/AlbertoDir/demo_5G/5G_inference/live_inference_state_5G.json" \
+  --remote-target "<remote/path/live_inference_state_5G.json>" \
   --scp-every 1 \
   --progress-every 1
 ```
@@ -433,18 +433,8 @@ python src/python/ssb_python/online_5g_python_cfo_json_scp.py \
 Watch the remote JSON:
 
 ```bash
-watch -n 0.5 "ssh nextnet@163.117.140.146 'cat ~/AlbertoDir/demo_5G/5G_inference/live_inference_state_5G.json'"
+watch -n 0.5 "ssh <user>@<ip-or-hostname> 'cat <remote/path/live_inference_state_5G.json>'"
 ```
-
-### Change the remote target
-
-For another machine, replace:
-
-```text
-nextnet@163.117.140.146:~/AlbertoDir/demo_5G/5G_inference/live_inference_state_5G.json
-```
-
-with:
 
 ```text
 <user>@<ip-or-hostname>:<remote/path/live_inference_state_5G.json>
@@ -547,7 +537,7 @@ The script gives a preparation countdown before collecting data, so the operator
 ### 9.1 Collect EMPTY data
 
 ```bash
-cd ~/AlbertoDir/DT_sensing_fusion
+cd DT_sensing_fusion
 source .venv_uhd/bin/activate
 
 python src/python/ssb_python/collect_labeled_rxgridssb_dataset_cfo.py \
