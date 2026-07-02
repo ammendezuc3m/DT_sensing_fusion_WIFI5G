@@ -1,0 +1,37 @@
+{
+  "description": "WiFi beacon CSI sensing configuration. Real 802.11a/g legacy OFDM beacon frames generated with USRP.",
+  "phy": {
+    "mode": "legacy_ofdm_non_ht",
+    "channel_bandwidth_hz": 20000000,
+    "sample_rate_hz": 20000000,
+    "data_rate_mbps": 6,
+    "modulation": "BPSK",
+    "coding_rate": "1/2"
+  },
+  "beacon": {
+    "ssid": "SENSING_WIFI",
+    "bssid": "02:11:22:33:44:55",
+    "profile": "router_like_wpa2",
+    "beacon_interval_tu": 98,
+    "tx_period_ms": 100.0,
+    "wifi_channel": 1
+  },
+  "tx": {
+    "freq_hz": 2412000000.0,
+    "gain_db": 10,
+    "start_delay_sec": 2.0,
+    "tx_lead_sec": 0.02,
+    "local_json": "results/wifi_online/live_wifi_tx_state.json"
+  },
+  "rx": {
+    "freq_hz": 2412000000.0,
+    "gain_db": 35,
+    "block_ms": 50,
+    "min_metric": 0.35,
+    "min_separation_ms": 20,
+    "local_json": "results/wifi_online/live_wifi_rx_state.json"
+  },
+  "dataset": {
+    "output_root": "data/wifi_csi_datasets"
+  }
+}
