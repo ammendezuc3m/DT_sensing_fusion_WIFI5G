@@ -137,7 +137,7 @@ src/python/ssb_python/online_5g_python_cfo_json_scp.py
 Typical local test:
 
 ```bash
-cd ~/AlbertoDir/DT_sensing_fusion
+cd DT_sensing_fusion
 source .venv_uhd/bin/activate
 
 python src/python/ssb_python/online_5g_python_cfo_json_scp.py \
@@ -156,6 +156,8 @@ python src/python/ssb_python/online_5g_python_cfo_json_scp.py \
   --inference-backend torch \
   --torch-model results/binary_empty_vs_P5_rx/model_rxGridSSB/model.pt \
   --torch-device cpu \
+  --mitsuba-position-map-json config/sionna_mitsuba_position_map.json \
+  --enable-mitsuba-export \
   --disable-scp \
   --progress-every 1
 ```
@@ -166,9 +168,15 @@ Local JSON output:
 results/online/live_inference_state_5G.json
 ```
 
+Local Mitsuba File output:
+
+```text
+results/online/live_person_sionna_scene.xml
+```
+
 ---
 
-### I want to send the online JSON to another machine
+### I want to send the online JSON/XML to another machine
 
 Read:
 
@@ -182,28 +190,18 @@ Use the `--remote-target` argument of:
 src/python/ssb_python/online_5g_python_cfo_json_scp.py
 ```
 
+and if you want to export XML also, use --enable-mitsuba-export argument.
+
+If --remote-target is provided for the JSON and no explicit XML target is provided, the XML is automatically sent to the same remote directory using the default filename:
+
+```text
+live_person_sionna_scene.xml
+```
+
 Example:
 
 ```bash
 --remote-target "factoryuser@192.168.1.50:/home/factoryuser/dt/live_inference_state_5G.json"
-```
-
-The current demo target is:
-
-```text
-nextnet@163.117.140.146:~/AlbertoDir/demo_5G/5G_inference/live_inference_state_5G.json
-```
-
-If SCP is too slow, send less frequently:
-
-```bash
---scp-every 3
-```
-
-or:
-
-```bash
---scp-every 5
 ```
 
 ---
@@ -508,29 +506,7 @@ For a new factory or deployment scenario:
 
 ---
 
-## 6. Git policy
-
-Do not commit generated datasets or runtime outputs:
-
-```text
-data/python_ssb_datasets/
-results/online/
-results/python_online_rxgridssb_dataset_cfo/
-results/python_rxgrid_distribution/
-logs/
-```
-
-Commit code, configurations, documentation, and small demonstration assets only.
-
-The current small demo model checkpoint is kept in the repository for demonstration:
-
-```text
-results/binary_empty_vs_P5_rx/model_rxGridSSB/model.pt
-```
-
----
-
-## 7. Quick links
+## 6. Quick links
 
 | Goal | Read this |
 |---|---|
