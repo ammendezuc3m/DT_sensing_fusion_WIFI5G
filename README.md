@@ -61,54 +61,48 @@ Important: this checkpoint is a demonstration model for the original lab setup. 
 
 ### 1.2 WiFi beacon CSI sensing
 
-The WiFi path uses two USRP B210 devices and two computers.
+The WiFi path uses an active USRP B210 transmitter and a second USRP B210
+receiver.
 
 ```text
-PC2 / USRP B210 TX
-  -> generate real 802.11a/g legacy OFDM beacon frame
-  -> transmit one beacon every 100 ms
+TX USRP B210
+  -> 802.11 legacy OFDM beacon, 20 MHz, 6 Mb/s
+  -> experiment Vendor IE and packet counter
+  -> valid FCS
+  -> timed transmission every 100 TU = 102.4 ms
 
-PC1 / USRP B210 RX
-  -> receive IQ at 20 Msps
-  -> detect beacon timing using L-LTF repetition
-  -> extract 52-subcarrier CSI from the L-LTF
-  -> save H5 / CSV / metadata
-  -> write live JSON
-  -> optional placeholder threshold inference
+RX USRP B210
+  -> continuous 20 Msps IQ
+  -> L-STF detection and coarse CFO correction
+  -> L-LTF timing and fine CFO correction
+  -> 52-subcarrier CSI extraction
+  -> L-SIG/DATA decoding
+  -> BSSID + FCS + Vendor IE validation
+  -> CSI sanitization
+  -> online inference
+```
+
+Current validated WiFi status:
+
+```text
+TX waveform/MAC/FCS: validated
+UHD timed transmission: validated
+1000 packets, 4,800,000 samples, zero zero-length sends
+Independent over-the-air RX validation: pending
+New CSI receiver and online inference: pending
 ```
 
 Main TX script:
 
 ```text
-src/python/wifi_sensing/tx_wifi_beacon_usrp.py
+src/python/wifi_sensing/tx_wifi_usrp.py
 ```
 
-Main online RX script:
-
-```text
-src/python/wifi_sensing/rx_wifi_beacon_csi_online_usrp.py
-```
-
-Main WiFi documentation:
+Detailed WiFi documentation:
 
 ```text
 README_WIFI_BEACON_CSI.md
-docs/WIFI_BEACON_CSI_PIPELINE.md
 ```
-
-Current tested WiFi PHY/MAC setup:
-
-```text
-802.11a/g legacy OFDM
-20 MHz channel
-6 Mb/s BPSK 1/2
-SSID: SENSING_WIFI
-BSSID: 02:11:22:33:44:55
-physical TX period: 100.000 ms
-Beacon Interval field: 98 TU = 100.352 ms
-```
-
-The physical transmission timing is controlled by the USRP timed TX loop. The 98 TU Beacon Interval field is the nearest standard beacon interval field value to 100 ms.
 
 ---
 

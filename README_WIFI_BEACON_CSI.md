@@ -1,427 +1,412 @@
-# WiFi Beacon CSI Quick Start
+# WiFi Beacon CSI Sensing with USRP B210
 
-This document explains how to run the WiFi beacon CSI part of the repository.
+This document describes the WiFi sensing branch of `DT_sensing_fusion_WIFI5G`.
 
-The WiFi pipeline uses two USRP B210 devices:
+The current implementation uses one USRP B210 as an active transmitter and a
+second USRP B210 as a receiver. The transmitter sends deterministic
+802.11 legacy OFDM beacon frames. The receiver will detect those frames,
+identify that they belong to this experiment, extract L-LTF CSI and feed the
+sanitized CSI to an online sensing model.
 
-```text
-PC2 / TX USRP
-  -> transmits real 802.11a/g legacy OFDM beacon frames every 100 ms
-
-PC1 / RX USRP
-  -> receives at 20 Msps
-  -> tracks beacons using the L-LTF repeated-symbol structure
-  -> extracts CSI from 52 active OFDM subcarriers
-  -> saves H5 / CSV / metadata
-  -> writes a live JSON state
-```
-
-The current setup is designed for controlled lab experiments and dataset collection. It is not intended to act as a production WiFi access point.
+The 5G SSB pipeline is independent and is documented separately.
 
 ---
 
-## 1. Current status
-
-Tested behavior:
+## 1. Architecture
 
 ```text
-TX: 802.11a/g beacon waveform transmitted every 100 ms
-RX offline: 50/50 CSI detections in a 5 s raw capture
-RX online: 565 CSI packets in a 60 s run with 0 RX overflows
+TX computer / USRP B210
+  -> build an 802.11 legacy OFDM beacon MPDU
+  -> add experiment-specific Vendor IE
+  -> calculate FCS
+  -> generate L-STF + L-LTF + L-SIG + DATA
+  -> transmit timed bursts with UHD every 100 TU
+
+RX computer / USRP B210
+  -> continuous IQ reception at 20 Msps
+  -> L-STF packet detection
+  -> coarse CFO estimation and correction
+  -> L-LTF timing alignment
+  -> fine CFO correction
+  -> 64-point OFDM FFT
+  -> CSI estimation on 52 active L-LTF subcarriers
+  -> L-SIG and DATA decoding
+  -> BSSID + FCS + Vendor IE validation
+  -> CSI sanitization
+  -> online inference
 ```
 
-Online RX quality observed in the tested setup:
+The RX chain is the next development stage. The TX chain described below has
+already been validated at the waveform, MAC, UHD streaming and timed-burst
+levels.
+
+---
+
+## 2. Current TX format
+
+The current beacon configuration is:
 
 ```text
-CSI rate: about 9.5 CSI/s
-period mean: about 0.100 s
-overflow_count: 0
+PHY:                   802.11 legacy OFDM, 20 MHz
+Rate:                  6 Mb/s, BPSK, coding rate 1/2
+Sample rate:           20 Msps
+Beacon interval:       100 TU
+Physical period:       102.4 ms
+Default SSID:          SENSING_WIFI
+Default BSSID:         02:11:22:33:44:55
+Default RF channel:    WiFi channel 1
+Default RF frequency:  2412 MHz
+```
+
+One TU is 1024 microseconds, therefore:
+
+```text
+100 TU = 102.4 ms
+```
+
+The RF center frequency and the channel announced in the beacon must agree.
+
+Common 2.4 GHz choices are:
+
+| WiFi channel | Center frequency |
+|---:|---:|
+| 1 | 2412 MHz |
+| 6 | 2437 MHz |
+| 11 | 2462 MHz |
+
+---
+
+## 3. Experiment-specific Vendor IE
+
+Each beacon contains a Vendor Specific Information Element before the FCS is
+calculated.
+
+Default fields:
+
+```text
+Element ID:       221
+OUI:              02:11:22
+Vendor type:      1
+Magic:            ALBSENS
+Version:          1
+Transmitter ID:   1
+Experiment ID:    1
+Packet counter:   incremented for every beacon
+```
+
+The receiver must only accept CSI after validating at least:
+
+```text
+Beacon subtype
+FCS
+BSSID
+Vendor OUI
+Vendor magic
+Transmitter ID
+Experiment ID
+Packet counter
+```
+
+L-STF and L-LTF alone cannot identify the transmitter because those fields are
+shared by legacy OFDM packets from other WiFi devices.
+
+---
+
+## 4. Main source files
+
+```text
+src/python/wifi_sensing/tx_wifi_usrp.py
+src/python/wifi_sensing/wifi_beacon_mac.py
+src/python/wifi_sensing/wifi_legacy_ofdm.py
+```
+
+Responsibilities:
+
+```text
+tx_wifi_usrp.py
+  Common packet-mode UHD transmitter.
+  Current mode: --mode beacon
+  Reserved future mode: --mode bf
+
+wifi_beacon_mac.py
+  Beacon MAC construction, tagged parameters, extra IEs and FCS.
+
+wifi_legacy_ofdm.py
+  Legacy OFDM PPDU generation:
+  L-STF + L-LTF + L-SIG + DATA.
 ```
 
 ---
 
-## 2. Hardware setup
+## 5. Environment
 
-Recommended roles:
-
-```text
-PC1 = RX computer
-PC2 = TX computer
-```
-
-USRP antenna ports used in the tested setup:
-
-```text
-PC1 RX antenna: RX2
-PC2 TX antenna: TX/RX
-```
-
-Check serials on each computer:
+Ubuntu packages:
 
 ```bash
-uhd_find_devices
+sudo apt update
+sudo apt install -y uhd-host python3-uhd python3-venv
 ```
 
-Use the serial reported by UHD in the commands below.
-
----
-
-## 3. Environment
-
-On each computer:
+Create the UHD environment from the repository root:
 
 ```bash
-cd DT_sensing_fusion_WIFI5G
 python3 -m venv --system-site-packages .venv_uhd
 source .venv_uhd/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements/requirements-uhd.txt
 ```
 
-Check imports:
+Check UHD and the radio:
+
+```bash
+uhd_find_devices
+```
+
+Check the Python binding:
 
 ```bash
 python - <<'PY'
 import uhd
-import numpy
-import h5py
-print("uhd OK")
-print("numpy", numpy.__version__)
-print("h5py OK")
+print("UHD Python binding OK")
 PY
 ```
 
 ---
 
-## 4. PC2: WiFi beacon TX
+## 6. Offline TX validation
 
-Start TX:
+Run from the repository root:
 
 ```bash
-cd DT_sensing_fusion_WIFI5G
 source .venv_uhd/bin/activate
 
-python src/python/wifi_sensing/tx_wifi_beacon_usrp.py \
-  --serial <tx_usrp_serial>
+python -m src.python.wifi_sensing.tx_wifi_usrp \
+  --mode beacon \
+  --freq 2.412e9 \
+  --wifi-channel 1 \
+  --beacon-interval-tu 100 \
+  --dry-run
 ```
 
-The script defaults are already set for the tested WiFi sensing configuration:
+This creates:
 
 ```text
-freq = 2.412 GHz
-sample rate = 20 Msps
-gain = 20 dB
-antenna = TX/RX
-SSID = SENSING_WIFI
-BSSID = 02:11:22:33:44:55
-WiFi channel = 1
-PHY = 802.11a/g legacy OFDM
-rate = 6 Mb/s BPSK 1/2
-TX period = 100.000 ms
-Beacon Interval field = 98 TU = 100.352 ms
-profile = router_like_wpa2
-num beacons = 5000
+results/wifi_debug/first_tx_packet.npz
+results/wifi_online/live_wifi_tx_state.json
 ```
 
-Expected TX output:
+The generated NPZ contains:
 
 ```text
-First beacon samples: 4160
-First beacon duration: 208.000 us
-sent=4160
+waveform
+mpdu
+sample_rate_hz
+metadata_json
+```
+
+The dry run must report:
+
+```text
+period_ms: 102.4
+sample rate: 20.000 Msps
+first waveform samples: 4800
+first waveform duration: 240 us
+```
+
+### Check Vendor IE and waveform
+
+```bash
+python - <<'PY'
+import json
+import numpy as np
+
+data = np.load("results/wifi_debug/first_tx_packet.npz")
+waveform = data["waveform"]
+mpdu = data["mpdu"].tobytes()
+metadata = json.loads(str(data["metadata_json"][0]))
+vendor_ie = bytes.fromhex(metadata["vendor_ie_hex"])
+
+print("Samples:", len(waveform))
+print("dtype:", waveform.dtype)
+print("Peak:", float(np.max(np.abs(waveform))))
+print("MPDU bytes:", len(mpdu))
+print("Vendor IE present:", vendor_ie in mpdu)
+print(json.dumps(metadata, indent=2))
+PY
+```
+
+Expected key result:
+
+```text
+Vendor IE present: True
+```
+
+### Check FCS
+
+```bash
+python - <<'PY'
+import struct
+import zlib
+import numpy as np
+
+mpdu = np.load(
+    "results/wifi_debug/first_tx_packet.npz"
+)["mpdu"].tobytes()
+
+expected = struct.pack("<I", zlib.crc32(mpdu[:-4]) & 0xffffffff)
+
+print("Stored FCS:    ", mpdu[-4:].hex())
+print("Calculated FCS:", expected.hex())
+print("FCS valid:", mpdu[-4:] == expected)
+PY
+```
+
+Expected:
+
+```text
+FCS valid: True
+```
+
+---
+
+## 7. RF transmission
+
+First identify the serial number:
+
+```bash
+uhd_find_devices
+```
+
+Example command:
+
+```bash
+python -m src.python.wifi_sensing.tx_wifi_usrp \
+  --mode beacon \
+  --serial 34B73C3 \
+  --freq 2.412e9 \
+  --wifi-channel 1 \
+  --rate 20e6 \
+  --bandwidth 20e6 \
+  --gain 10 \
+  --antenna "TX/RX" \
+  --ssid "SENSING_WIFI" \
+  --bssid "02:11:22:33:44:55" \
+  --beacon-interval-tu 100 \
+  --vendor-oui "02:11:22" \
+  --vendor-type 1 \
+  --vendor-magic "ALBSENS" \
+  --vendor-version 1 \
+  --transmitter-id 1 \
+  --experiment-id 1 \
+  --num-packets 1000 \
+  --progress-every 10
+```
+
+Use a moderate initial gain when TX and RX are close. Increase it only after
+checking that the receiver is not saturated.
+
+A successful UHD run should show:
+
+```text
+actual TX rate: 20.000000 Msps
+actual TX frequency: 2412.000000 MHz
 zero_sends=0
 ```
 
-If `progress-every` is left at the default, the script prints every 50 beacons.
+At the end:
+
+```text
+Sent packets: 1000
+Total sent samples: 4800000
+Total zero sends: 0
+```
+
+`burst_ack` means that UHD processed the corresponding timed burst. It does not
+by itself measure RF power at the antenna connector. Independent reception with
+the second USRP is still required to prove over-the-air propagation.
 
 ---
 
-## 5. PC1: WiFi online CSI RX
+## 8. Validated status
 
-Start RX:
+Validated on the current TX machine:
+
+```text
+Beacon MAC construction
+100 TU beacon interval
+Vendor IE insertion before FCS
+Valid FCS
+20 Msps legacy OFDM waveform
+4800 samples / 240 us per PPDU
+UHD B210 configuration over USB 3
+Timed TX
+1000 packets submitted
+4,800,000 samples submitted
+0 zero-length sends
+No observed UHD underflow, sequence or time errors
+999 asynchronous burst acknowledgements observed
+```
+
+The missing final acknowledgement is not considered evidence of a failed
+transmission; the asynchronous queue was drained during the packet loop and
+the final event may arrive after the last poll.
+
+Pending:
+
+```text
+Independent over-the-air RF reception
+New L-STF detector
+Coarse and fine CFO correction
+L-LTF CSI extraction
+L-SIG and DATA decoding
+Vendor IE validation at RX
+CSI sanitization
+Online model inference
+```
+
+---
+
+## 9. CSI sanitization plan
+
+Before inference, the receiver pipeline will:
+
+```text
+Remove common phase rotation
+Remove linear phase slope across subcarriers
+Normalize amplitude
+Reject low-quality packets
+Evaluate subcarrier or antenna ratios
+Start with CSI magnitude before adding phase
+Keep TX and RX gains fixed during each experiment
+```
+
+The initial model input will prioritize `abs(H[k])`. Sanitized phase will only
+be introduced after verifying that it contributes information without learning
+clock, timing or hardware drift.
+
+---
+
+## 10. Future beamforming mode
+
+The common transmitter supports packet builders by mode:
 
 ```bash
-cd DT_sensing_fusion_WIFI5G
-source .venv_uhd/bin/activate
-
-python src/python/wifi_sensing/rx_wifi_beacon_csi_online_usrp.py \
-  --serial "<rx_usrp_serial>,num_recv_frames=512,recv_frame_size=8200"
+--mode beacon
+--mode bf
 ```
 
-The script defaults are already set for the tested online RX configuration:
+`--mode bf` is reserved and intentionally not implemented yet.
+
+A beamforming implementation may require more than a different MAC packet:
 
 ```text
-freq = 2.412 GHz
-sample rate = 20 Msps
-gain = 35 dB
-antenna = RX2
-duration = 60 s
-block-ms = 200
-queue-blocks = 8
-max-drain-blocks = 4
-init-seconds = 1
-TX period = 100 ms
-seed-threshold = 0.10
-accept-threshold = 0.10
-search-radius-ms = 5
-buffer-keep-sec = 0.5
-output-root = data/wifi_csi_datasets
-local JSON = results/wifi_online/live_wifi_rx_state.json
+Multiple TX chains
+Relative phase calibration
+Cable and antenna calibration
+Complex beamforming weights
+Synchronous multi-channel streaming
+A defined sounding or feedback protocol
 ```
 
-Expected output for a good 60 s run:
-
-```text
-Detected CSI packets: about 540-590
-Missed beacons: low
-overflow_count: 0
-```
-
-The exact count depends on signal strength, antenna placement, multipath, and whether the receiver misses some beacons during initialization/tracking.
-
----
-
-## 6. Watch the live JSON
-
-In another terminal on PC1:
-
-```bash
-watch -n 0.5 cat results/wifi_online/live_wifi_rx_state.json
-```
-
-Important JSON fields:
-
-```text
-status
-packets_detected
-missed_beacons
-phase_samples
-period_samples
-last_packet.ltf_metric
-last_packet.cfo_hz
-last_packet.rx_power_db
-last_packet.csi_shape
-last_packet.inference
-rx_stats.overflow_count
-rx_stats.dropped_blocks
-```
-
----
-
-## 7. Output dataset format
-
-Each RX run creates:
-
-```text
-data/wifi_csi_datasets/<label>/<session_id>/
-  session_data.h5
-  metadata.json
-  capture_log.csv
-```
-
-Main H5 datasets:
-
-```text
-csi                  complex64, shape [N, 52]
-csi_amp              float32,   shape [N, 52]
-csi_phase            float32,   shape [N, 52]
-timestamp_unix       float64,   shape [N]
-timestamp_usrp_rx    float64,   shape [N]
-packet_index         int64,     shape [N]
-timing_offset_samples int64,    shape [N]
-cfo_hz               float32,   shape [N]
-ltf_metric           float32,   shape [N]
-rx_power_db          float32,   shape [N]
-```
-
-The CSI vector has 52 entries because the legacy OFDM symbol uses 52 active subcarriers:
-
-```text
-48 data subcarriers + 4 pilot subcarriers
-```
-
----
-
-## 8. Quick H5 inspection
-
-```bash
-LAST_H5="$(find data/wifi_csi_datasets -name session_data.h5 | sort | tail -n 1)"
-
-python - <<'PY'
-import os
-import h5py
-import numpy as np
-
-p = os.environ.get("LAST_H5")
-
-with h5py.File(p, "r") as h5:
-    print("file:", p)
-    print("csi:", h5["csi"].shape)
-
-    m = h5["ltf_metric"][:]
-    print("metric mean:", np.mean(m) if len(m) else None)
-    print("metric min/max:", (np.min(m), np.max(m)) if len(m) else None)
-    print("metric > 0.5:", np.sum(m > 0.5), "/", len(m))
-
-    t = h5["timestamp_unix"][:]
-    if len(t) > 1:
-        dt = np.diff(t)
-        print("period mean:", np.mean(dt))
-        print("period std:", np.std(dt))
-        print("first periods:", dt[:10])
-PY
-```
-
-A good run should have:
-
-```text
-period mean close to 0.100 s
-overflow_count = 0 in the final RX stats
-```
-
----
-
-## 9. Inference options
-
-The online RX currently supports:
-
-```text
---inference-backend none
---inference-backend threshold
-```
-
-Default:
-
-```text
---inference-backend none
-```
-
-This writes:
-
-```text
-label = UNTRAINED
-confidence = 0.0
-```
-
-Placeholder threshold inference:
-
-```bash
-python src/python/wifi_sensing/rx_wifi_beacon_csi_online_usrp.py \
-  --serial "<rx_usrp_serial>,num_recv_frames=512,recv_frame_size=8200" \
-  --inference-backend threshold
-```
-
-This is not a trained model. It is only useful to test that the JSON contains label/probability/confidence fields before a real WiFi model is available.
-
-Future model flow:
-
-```text
-1. Collect labeled WiFi CSI sessions.
-2. Train a model using csi_amp/csi_phase or complex CSI features.
-3. Add/use a torch backend for WiFi inference.
-4. Run online RX with --model-path pointing to the trained checkpoint.
-```
-
----
-
-## 10. Offline raw capture fallback
-
-For the cleanest dataset or for debugging, use raw IQ capture followed by offline L-LTF tracking.
-
-### 10.1 Capture raw IQ on PC1
-
-Start PC2 TX first. Then on PC1:
-
-```bash
-python src/python/wifi_sensing/rx_wifi_raw_capture_usrp.py \
-  --serial <rx_usrp_serial> \
-  --freq 2.412e9 \
-  --rate 20e6 \
-  --gain 35 \
-  --antenna RX2 \
-  --duration-sec 5 \
-  --block-ms 50 \
-  --output-npy results/wifi_debug/raw_wifi_5s.npy
-```
-
-A good raw capture should show:
-
-```text
-overflow_count: 0
-```
-
-### 10.2 Process raw IQ offline
-
-```bash
-python src/python/wifi_sensing/process_wifi_raw_capture_ltf_tracker.py \
-  --input-npy results/wifi_debug/raw_wifi_5s.npy \
-  --rate 20e6 \
-  --tx-period-ms 100.0 \
-  --seed-threshold 0.10 \
-  --accept-threshold 0.10 \
-  --search-radius-ms 5 \
-  --output-h5 results/wifi_debug/raw_wifi_5s_ltf_tracker_csi.h5
-```
-
-Expected result for a clean 5 s capture:
-
-```text
-expected: 50
-detections: close to 50
-period mean: close to 0.100 s
-```
-
----
-
-## 11. Important implementation details
-
-### 11.1 Why L-LTF tracking is used
-
-The receiver does not decode the full 802.11 MAC frame. It detects beacon timing and extracts CSI using the legacy WiFi preamble, specifically the L-LTF.
-
-The L-LTF contains two repeated 64-sample long training symbols. The tracker correlates those repeated symbols to find packet starts robustly under channel distortion and multipath.
-
-### 11.2 Why not scan the full signal continuously
-
-A naive full-stream detector was too expensive for 20 Msps in Python. The current online method is:
-
-```text
-1. Collect a short initialization buffer.
-2. Detect seed beacons.
-3. Estimate the beacon phase modulo 100 ms.
-4. Track future beacons at phase + n * 100 ms.
-5. Search only a small window around each expected beacon.
-```
-
-This is why the online receiver can run close to 10 CSI/s in Python.
-
-### 11.3 PHY/MAC limitations
-
-The TX waveform is generated by software and transmitted by USRP. It is intended for CSI experiments. It is not a full WiFi AP stack:
-
-```text
-No association
-No IP
-No DHCP
-No CSMA/CA
-No hostapd
-No traffic data frames
-```
-
-The transmitted management frame is a beacon-like 802.11 frame with realistic fields for the experiment.
-
----
-
-## 12. Git policy
-
-Do not commit generated WiFi outputs:
-
-```text
-data/wifi_csi_datasets/
-results/wifi_debug/
-results/wifi_online/
-__pycache__/
-*.pyc
-```
-
-Commit only code, configs, docs, and intentional model artifacts.
+The current abstraction allows that extension without duplicating the complete
+UHD control and timed-transmission logic.

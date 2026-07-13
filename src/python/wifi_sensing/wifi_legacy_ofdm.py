@@ -282,11 +282,12 @@ def make_beacon_waveform(
     ssid: str = "SENSING_WIFI",
     bssid: str = "02:11:22:33:44:55",
     channel: int = 1,
-    beacon_interval_tu: int = 98,
+    beacon_interval_tu: int = 100,
     sequence_number: int = 0,
     timestamp_us: int = 0,
     profile: str = "router_like_wpa2",
     scrambler_state: int = 0x5D,
+    extra_ies: list[bytes] | tuple[bytes, ...] | None = None,
 ) -> tuple[np.ndarray, bytes]:
 
     cfg = BeaconConfig(
@@ -297,6 +298,7 @@ def make_beacon_waveform(
         sequence_number=sequence_number,
         timestamp_us=timestamp_us,
         profile=profile,
+        extra_ies=tuple(bytes(x) for x in (extra_ies or ())),
     )
 
     mpdu = build_beacon_mpdu(cfg, include_fcs=True)
@@ -310,10 +312,10 @@ def main() -> None:
     p.add_argument("--ssid", default="SENSING_WIFI")
     p.add_argument("--bssid", default="02:11:22:33:44:55")
     p.add_argument("--channel", type=int, default=1)
-    p.add_argument("--beacon-interval-tu", type=int, default=98)
+    p.add_argument("--beacon-interval-tu", type=int, default=100)
     p.add_argument("--sequence-number", type=int, default=0)
     p.add_argument("--timestamp-us", type=int, default=0)
-    p.add_argument("--profile", choices=["minimal_open", "router_like_wpa2"], default="router_like_wpa2")
+    p.add_argument("--profile", choices=["minimal", "minimal_open", "router_like_wpa2"], default="router_like_wpa2")
     p.add_argument("--output-npz", default="results/wifi_debug/beacon_ofdm_6mbps.npz")
     args = p.parse_args()
 

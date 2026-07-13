@@ -130,3 +130,19 @@ data/wifi_csi_datasets/
 results/wifi_debug/
 results/wifi_online/
 results/wlan_sensing_dmg/
+
+# WiFi local environment, backups and generated models
+.venv_uhd
+*.backup_*
+*.bak_vendor_ie
+results/wifi_models/
+
+# Local WiFi runtime outputs
+results/wifi_debug/
+results/wifi_online/
+
+# Local RF captures
+*.iq
+*.cf32
+*.sc16
+*.raw

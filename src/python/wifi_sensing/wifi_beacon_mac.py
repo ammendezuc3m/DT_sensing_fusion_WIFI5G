@@ -119,12 +119,14 @@ class BeaconConfig:
     ssid: str = "SENSING_WIFI"
     bssid: str = "02:11:22:33:44:55"
     source_mac: str | None = None
-    beacon_interval_tu: int = 98
+    beacon_interval_tu: int = 100
     channel: int = 1
     sequence_number: int = 0
     timestamp_us: int = 0
     profile: str = "router_like_wpa2"
     country: str = "ES"
+    # Complete encoded IEs: Element ID + Length + Payload.
+    extra_ies: tuple[bytes, ...] = ()
 
 
 def capability_info(profile: str) -> int:
@@ -133,7 +135,7 @@ def capability_info(profile: str) -> int:
     short_slot = 1 << 10
     radio_measurement = 1 << 12
 
-    if profile == "minimal_open":
+    if profile in ("minimal", "minimal_open"):
         return ess | short_slot
 
     if profile == "router_like_wpa2":
@@ -163,10 +165,22 @@ def build_beacon_body(cfg: BeaconConfig) -> bytes:
         tagged += extended_supported_rates_ie()
         tagged += rsn_wpa2_psk_ccmp_ie()
         tagged += wmm_parameter_ie()
-    elif cfg.profile == "minimal_open":
+    elif cfg.profile in ("minimal", "minimal_open"):
         tagged += extended_supported_rates_ie()
     else:
         raise ValueError(f"Unknown beacon profile: {cfg.profile}")
+
+    for encoded_ie in cfg.extra_ies:
+        encoded_ie = bytes(encoded_ie)
+        if len(encoded_ie) < 2:
+            raise ValueError("Each extra IE must include Element ID and Length")
+        declared_length = encoded_ie[1]
+        actual_length = len(encoded_ie) - 2
+        if declared_length != actual_length:
+            raise ValueError(
+                f"Malformed extra IE: declared payload length {declared_length}, actual {actual_length}"
+            )
+        tagged += encoded_ie
 
     return fixed + bytes(tagged)
 
@@ -227,11 +241,11 @@ def main() -> None:
     p.add_argument("--ssid", default="SENSING_WIFI")
     p.add_argument("--bssid", default="02:11:22:33:44:55")
     p.add_argument("--source-mac", default=None)
-    p.add_argument("--beacon-interval-tu", type=int, default=98)
+    p.add_argument("--beacon-interval-tu", type=int, default=100)
     p.add_argument("--channel", type=int, default=1)
     p.add_argument("--sequence-number", type=int, default=0)
     p.add_argument("--timestamp-us", type=int, default=0)
-    p.add_argument("--profile", choices=["minimal_open", "router_like_wpa2"], default="router_like_wpa2")
+    p.add_argument("--profile", choices=["minimal", "minimal_open", "router_like_wpa2"], default="router_like_wpa2")
     p.add_argument("--country", default="ES")
     p.add_argument("--output-bin", default="")
     args = p.parse_args()
