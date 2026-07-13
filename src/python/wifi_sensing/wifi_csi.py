@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """
-WiFi legacy OFDM packet detection and CSI extraction.
+Fast WiFi legacy OFDM packet detection and CSI extraction.
 
-The detector correlates against the known generated preamble.
-CSI is extracted from the two L-LTF symbols.
+Detection:
+  - Uses L-STF 16-sample periodicity for fast online detection.
+  - Refines timing locally using the known L-STF + L-LTF preamble.
+
+CSI:
+  - Extracted from the two L-LTF OFDM symbols.
 """
 
 from __future__ import annotations
@@ -48,19 +52,61 @@ def known_preamble() -> np.ndarray:
     return np.concatenate([generate_l_stf(), generate_l_ltf()]).astype(np.complex64)
 
 
-def normalized_correlation(x: np.ndarray, template: np.ndarray) -> np.ndarray:
-    if len(x) < len(template):
+def moving_sum(x: np.ndarray, win: int) -> np.ndarray:
+    if len(x) < win:
+        return np.zeros(0, dtype=x.dtype)
+    return np.convolve(x, np.ones(win, dtype=x.dtype), mode="valid")
+
+
+def stf_autocorr_metric(iq: np.ndarray, lag: int = 16, win: int = 144) -> np.ndarray:
+    """
+    Fast Schmidl-style metric based on L-STF repetition.
+
+    metric[n] = |sum conj(x[n+k]) x[n+k+16]|^2 / energy^2
+    """
+    if len(iq) < lag + win + 1:
         return np.zeros(0, dtype=np.float32)
 
-    t = template.astype(np.complex64)
-    t_energy = float(np.sum(np.abs(t) ** 2))
+    x1 = iq[:-lag]
+    x2 = iq[lag:]
 
-    corr = np.abs(np.convolve(x, np.conj(t[::-1]), mode="valid")) ** 2
-    power = np.convolve(np.abs(x) ** 2, np.ones(len(t), dtype=np.float32), mode="valid")
+    corr_terms = np.conj(x1) * x2
+    energy_terms = np.abs(x2) ** 2
 
-    denom = power * t_energy + 1e-12
+    p = moving_sum(corr_terms.astype(np.complex64), win)
+    r = moving_sum(energy_terms.astype(np.float32), win)
 
-    return (corr / denom).astype(np.float32)
+    metric = (np.abs(p) ** 2) / (r ** 2 + 1e-12)
+    return metric.astype(np.float32)
+
+
+def local_preamble_refine(iq: np.ndarray, coarse: int, search_before: int = 80, search_after: int = 160) -> tuple[int, float]:
+    """
+    Refine packet start by correlating locally with known L-STF+L-LTF.
+    """
+    tpl = known_preamble()
+    tpl_energy = float(np.sum(np.abs(tpl) ** 2)) + 1e-12
+
+    start = max(0, coarse - search_before)
+    stop = min(len(iq) - len(tpl), coarse + search_after)
+
+    if stop <= start:
+        return coarse, 0.0
+
+    best_i = start
+    best_m = -1.0
+
+    for i in range(start, stop + 1):
+        seg = iq[i:i + len(tpl)]
+        seg_energy = float(np.sum(np.abs(seg) ** 2)) + 1e-12
+        c = np.abs(np.vdot(tpl, seg)) ** 2
+        m = float(c / (tpl_energy * seg_energy))
+
+        if m > best_m:
+            best_m = m
+            best_i = i
+
+    return int(best_i), float(best_m)
 
 
 def find_packet_offsets(
@@ -70,8 +116,7 @@ def find_packet_offsets(
     max_packets: int | None = None,
 ) -> list[tuple[int, float]]:
 
-    pre = known_preamble()
-    metric = normalized_correlation(iq, pre)
+    metric = stf_autocorr_metric(iq)
 
     if len(metric) == 0:
         return []
@@ -82,17 +127,39 @@ def find_packet_offsets(
         return []
 
     selected: list[tuple[int, float]] = []
-    used_until = -1
+    last_selected = -10**12
 
-    for idx in candidates:
-        if idx < used_until:
+    # Group contiguous threshold crossings.
+    groups: list[tuple[int, int]] = []
+    g_start = int(candidates[0])
+    prev = int(candidates[0])
+
+    for c in candidates[1:]:
+        c = int(c)
+        if c <= prev + 1:
+            prev = c
+        else:
+            groups.append((g_start, prev))
+            g_start = c
+            prev = c
+
+    groups.append((g_start, prev))
+
+    for start, end in groups:
+        if start - last_selected < min_separation_samples:
             continue
 
-        end = min(len(metric), idx + min_separation_samples)
-        local = idx + int(np.argmax(metric[idx:end]))
+        # Use the beginning of the plateau as coarse start, then refine.
+        refined, refine_metric = local_preamble_refine(iq, start)
 
-        selected.append((local, float(metric[local])))
-        used_until = local + min_separation_samples
+        if refine_metric < min_metric:
+            continue
+
+        if refined - last_selected < min_separation_samples:
+            continue
+
+        selected.append((refined, refine_metric))
+        last_selected = refined
 
         if max_packets is not None and len(selected) >= max_packets:
             break
@@ -120,7 +187,6 @@ def estimate_cfo_from_ltf(packet: np.ndarray, sample_rate: float = SAMPLE_RATE) 
 def correct_cfo(iq: np.ndarray, cfo_hz: float, sample_rate: float = SAMPLE_RATE) -> np.ndarray:
     n = np.arange(len(iq), dtype=np.float64)
     rot = np.exp(-1j * 2 * np.pi * cfo_hz * n / sample_rate)
-
     return (iq * rot).astype(np.complex64)
 
 

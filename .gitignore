@@ -124,3 +124,8 @@ data/python_iq_blocks/
 
 # Python labeled SSB datasets
 data/python_ssb_datasets/
+
+# WiFi sensing generated outputs
+data/wifi_csi_datasets/
+results/wifi_debug/
+results/wifi_online/

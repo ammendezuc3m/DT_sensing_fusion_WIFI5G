@@ -123,19 +123,19 @@ def main() -> None:
 
     p.add_argument("--serial", default="")
     p.add_argument("--freq", type=float, default=2.412e9)
-    p.add_argument("--rate", type=float, default=SAMPLE_RATE)
-    p.add_argument("--gain", type=float, default=15.0)
+    p.add_argument("--rate", type=float, default=20e6)
+    p.add_argument("--gain", type=float, default=20.0)
     p.add_argument("--channel", type=int, default=0)
-    p.add_argument("--antenna", default="")
+    p.add_argument("--antenna", default="TX/RX")
 
     p.add_argument("--ssid", default="SENSING_WIFI")
     p.add_argument("--bssid", default="02:11:22:33:44:55")
     p.add_argument("--wifi-channel", type=int, default=1)
-    p.add_argument("--profile", choices=["minimal_open", "router_like_wpa2"], default="router_like_wpa2")
+    p.add_argument("--profile", choices=["minimal", "router_like_wpa2"], default="router_like_wpa2")
 
     p.add_argument("--tx-period-ms", type=float, default=100.0)
     p.add_argument("--beacon-interval-tu", type=int, default=98)
-    p.add_argument("--num-beacons", type=int, default=1000)
+    p.add_argument("--num-beacons", type=int, default=5000)
     p.add_argument("--start-delay-sec", type=float, default=2.0)
     p.add_argument("--tx-lead-sec", type=float, default=0.020)
     p.add_argument("--amplitude", type=float, default=0.55)
@@ -143,7 +143,7 @@ def main() -> None:
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--save-first-npz", default="results/wifi_debug/first_tx_beacon.npz")
     p.add_argument("--local-json", default="results/wifi_online/live_wifi_tx_state.json")
-    p.add_argument("--progress-every", type=int, default=10)
+    p.add_argument("--progress-every", type=int, default=50)
 
     args = p.parse_args()
 

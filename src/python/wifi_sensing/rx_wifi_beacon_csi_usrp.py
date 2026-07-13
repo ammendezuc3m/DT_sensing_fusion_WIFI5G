@@ -55,7 +55,7 @@ def main() -> None:
     p.add_argument("--antenna", default="")
 
     p.add_argument("--duration-sec", type=float, default=30.0)
-    p.add_argument("--block-ms", type=float, default=50.0)
+    p.add_argument("--block-ms", type=float, default=5.0)
     p.add_argument("--min-metric", type=float, default=0.35)
     p.add_argument("--min-separation-ms", type=float, default=20.0)
 
@@ -164,7 +164,7 @@ def main() -> None:
     cmd.stream_now = True
     rx_streamer.issue_stream_cmd(cmd)
 
-    overlap_len = int(0.01 * args.rate)
+    overlap_len = int(round(0.001 * args.rate))
     overlap = np.zeros(0, dtype=np.complex64)
 
     min_sep = int(round(args.min_separation_ms * 1e-3 * args.rate))
