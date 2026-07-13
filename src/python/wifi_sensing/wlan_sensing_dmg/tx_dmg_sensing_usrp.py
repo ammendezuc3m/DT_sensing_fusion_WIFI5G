@@ -253,11 +253,43 @@ def main() -> None:
 
     try:
         for burst_idx in range(args.num_bursts):
+            # Pace the host loop.
+            #
+            # The DMG-like waveform is much larger than the previous beacon waveform.
+            # If we enqueue all future timed bursts immediately, the B210 TX buffer
+            # fills and tx_stream.send() starts returning 0 samples.
+            #
+            # Therefore, wait until we are close to the scheduled hardware time and
+            # send the burst only args.tx_lead_sec seconds before it should go out.
+            while True:
+                now = usrp.get_time_now().get_real_secs()
+                wait_s = (next_time - args.tx_lead_sec) - now
+
+                if wait_s <= 0:
+                    break
+
+                time.sleep(min(wait_s, 0.010))
+
             now = usrp.get_time_now().get_real_secs()
 
-            # Do not schedule too close to current hardware time.
-            if next_time < now + args.tx_lead_sec:
-                next_time = now + args.tx_lead_sec
+            # If the host is truly late, skip forward to the next safe transmit slot.
+            #
+            # Important:
+            #   args.tx_lead_sec is the desired enqueue lead time, e.g. 20 ms.
+            #   It must NOT be used as the lateness threshold. Otherwise a tiny
+            #   host jitter around the wake-up point makes the scheduler skip one
+            #   whole period, turning 100 ms into 200 ms.
+            #
+            # A burst is only considered late if it is less than a few milliseconds
+            # ahead of current USRP time.
+            min_schedule_lead_s = 0.003
+
+            if next_time < now + min_schedule_lead_s:
+                if period_s > 0:
+                    missed = int(np.floor((now + min_schedule_lead_s - next_time) / period_s)) + 1
+                    next_time += missed * period_s
+                else:
+                    next_time = now + min_schedule_lead_s
 
             md = uhd.types.TXMetadata()
             md.has_time_spec = True
@@ -307,10 +339,16 @@ def main() -> None:
         print("Interrupted by user.")
 
     finally:
-        md = uhd.types.TXMetadata()
-        md.start_of_burst = False
-        md.end_of_burst = True
-        tx_stream.send(np.zeros(0, dtype=np.complex64), md)
+        # Each burst is already sent with end_of_burst=True.
+        # Some UHD Python builds reject zero-length arrays for single-channel streams,
+        # so this final explicit EOB marker is best-effort only.
+        try:
+            md = uhd.types.TXMetadata()
+            md.start_of_burst = False
+            md.end_of_burst = True
+            tx_stream.send(np.zeros((1, 0), dtype=np.complex64), md)
+        except Exception as e:
+            print(f"[WARN] final EOB marker not sent: {e}")
 
         state = dict(base_state)
         state.update(
