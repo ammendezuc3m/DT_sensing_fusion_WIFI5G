@@ -1,19 +1,30 @@
-# DT_sensing_fusion
+# DT_sensing_fusion_WIFI5G
 
-Passive 5G SSB sensing project using a USRP B210 receiver and a 5G Ericsson DOT/cell.
+Integrated 5G SSB and WiFi beacon CSI sensing repository using USRP B210 radios.
 
-This repository contains the code needed to run **Python-only online 5G sensing**, collect labeled SSB datasets, and deploy a PyTorch model that writes JSON outputs for a Digital Twin or any other external consumer.
+This repository contains two complementary sensing pipelines:
 
-The previous MATLAB workflow is kept only as historical/reference material. The recommended deployment path is now Python-only.
+```text
+1. 5G SSB sensing
+   Passive receiver pipeline based on 5G SSB/rxGridSSB features.
+
+2. WiFi beacon CSI sensing
+   Active TX/RX pipeline where one USRP transmits 802.11a/g beacon frames and
+   another USRP extracts CSI from the received WiFi L-LTF.
+```
+
+The recommended deployment path is Python-only. MATLAB material is kept only as historical/reference material for the original 5G validation workflow.
 
 ---
 
-## 1. Current recommended pipeline
+## 1. Repository scope
 
-The current online sensing chain is:
+### 1.1 5G SSB sensing
+
+The 5G path receives SSB bursts from a 5G source/cell and extracts a complex SSB grid for inference.
 
 ```text
-USRP B210
+USRP B210 RX
   -> Python UHD IQ capture
   -> CFO warmup/correction
   -> PSS/NID2/timing detection
@@ -21,6 +32,7 @@ USRP B210
   -> dataSSB / rxGridSSB extraction
   -> PyTorch model inference
   -> local JSON
+  -> optional Mitsuba/Sionna XML
   -> optional SCP to a remote Digital Twin machine
 ```
 
@@ -30,118 +42,262 @@ Main online script:
 src/python/ssb_python/online_5g_python_cfo_json_scp.py
 ```
 
-Current PyTorch model loader:
-
-```text
-src/python/ssb_python/rxgrid_torch_inference.py
-```
-
 Current demo checkpoint:
 
 ```text
 results/binary_empty_vs_P5_rx/model_rxGridSSB/model.pt
 ```
 
-Current dataset collection script:
+Current demo classes:
 
 ```text
-src/python/ssb_python/collect_labeled_rxgridssb_dataset_cfo.py
+empty
+P5
 ```
+
+Important: this checkpoint is a demonstration model for the original lab setup. It is not a general human detector and should be retrained for a new room, factory, antenna placement, receiver location, or class set.
 
 ---
 
-## 2. What the current model does
+### 1.2 WiFi beacon CSI sensing
 
-The included model is a **binary demonstration model** trained for the current lab setup:
-
-```text
-empty vs P5
-```
-
-Meaning:
+The WiFi path uses two USRP B210 devices and two computers.
 
 ```text
-empty = no target/person in the trained scene
-P5    = target/person at position P5 in the trained scene
+PC2 / USRP B210 TX
+  -> generate real 802.11a/g legacy OFDM beacon frame
+  -> transmit one beacon every 100 ms
+
+PC1 / USRP B210 RX
+  -> receive IQ at 20 Msps
+  -> detect beacon timing using L-LTF repetition
+  -> extract 52-subcarrier CSI from the L-LTF
+  -> save H5 / CSV / metadata
+  -> write live JSON
+  -> optional placeholder threshold inference
 ```
 
-Important: this model is **not a general human detector**.
-
-It is not expected to generalize automatically to:
+Main TX script:
 
 ```text
-a different factory
-a different antenna placement
-a different USRP/receiver position
-a different room or geometry
-a different set of target positions
-a different 5G source/cell configuration
-a different class set
+src/python/wifi_sensing/tx_wifi_beacon_usrp.py
 ```
 
-For a new deployment, the correct workflow is:
+Main online RX script:
 
 ```text
-1. Install the environment.
-2. Connect and test the USRP B210.
-3. Collect a new labeled dataset in the target environment.
-4. Train a new model using that dataset.
-5. Replace the checkpoint used by the online script.
-6. Run online inference with the new checkpoint.
+src/python/wifi_sensing/rx_wifi_beacon_csi_online_usrp.py
 ```
 
-The included checkpoint is mainly useful to demonstrate that the full end-to-end pipeline works.
+Main WiFi documentation:
+
+```text
+README_WIFI_BEACON_CSI.md
+docs/WIFI_BEACON_CSI_PIPELINE.md
+```
+
+Current tested WiFi PHY/MAC setup:
+
+```text
+802.11a/g legacy OFDM
+20 MHz channel
+6 Mb/s BPSK 1/2
+SSID: SENSING_WIFI
+BSSID: 02:11:22:33:44:55
+physical TX period: 100.000 ms
+Beacon Interval field: 98 TU = 100.352 ms
+```
+
+The physical transmission timing is controlled by the USRP timed TX loop. The 98 TU Beacon Interval field is the nearest standard beacon interval field value to 100 ms.
 
 ---
 
-## 3. Which document should I read?
+## 2. Hardware roles
 
-### I want to deploy online 5G sensing on a new computer
-
-Read:
+The current recommended two-PC setup is:
 
 ```text
-README_5G_SSB_PYTHON_DEPLOYMENT.md
+PC1 = receiver
+  - WiFi CSI RX
+  - future combined 5G RX + WiFi RX/synchronization logic
+
+PC2 = transmitter
+  - WiFi beacon TX
 ```
 
-This is the main deployment guide. It explains:
+Both computers can run both scripts after pulling the same repository version, but the tested default assumptions are:
 
 ```text
-hardware setup
-fresh computer setup
-UHD/Python environment
-how to run online inference
-how to send JSON by SCP
-how to change the remote IP/path
-how to collect a labeled dataset
-how the dataset is stored
-how to replace the model
+PC1 RX antenna: RX2
+PC2 TX antenna: TX/RX
 ```
 
----
-
-### I want to run the current Python-only online inference
-
-Read:
-
-```text
-README_online_python_5g.md
-```
-
-Main script:
-
-```text
-src/python/ssb_python/online_5g_python_cfo_json_scp.py
-```
-
-Typical local test:
+Use the real serial numbers reported by:
 
 ```bash
-cd DT_sensing_fusion
+uhd_find_devices
+```
+
+---
+
+## 3. Fresh computer setup
+
+### 3.1 Clone
+
+```bash
+git clone git@github.com:ammendezuc3m/DT_sensing_fusion_WIFI5G.git
+cd DT_sensing_fusion_WIFI5G
+```
+
+If SSH is not configured, use the HTTPS clone URL and authenticate with a GitHub token.
+
+### 3.2 Install system dependencies
+
+```bash
+sudo apt update
+sudo apt install -y \
+  git \
+  python3 \
+  python3-pip \
+  python3-venv \
+  uhd-host \
+  python3-uhd
+```
+
+Check the USRP:
+
+```bash
+uhd_find_devices
+uhd_usrp_probe
+```
+
+### 3.3 Create the UHD Python environment
+
+The UHD Python binding is provided by the OS package, so the virtual environment must expose system site packages.
+
+```bash
+python3 -m venv --system-site-packages .venv_uhd
+source .venv_uhd/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements/requirements-uhd.txt
+```
+
+If the requirements file is unavailable, install the minimal dependencies:
+
+```bash
+python -m pip install "numpy<2" scipy h5py matplotlib torch
+```
+
+Check imports:
+
+```bash
+python - <<'PY'
+import numpy
+import h5py
+import uhd
+print("numpy:", numpy.__version__)
+print("h5py OK")
+print("uhd OK")
+PY
+```
+
+---
+
+## 4. Quick start: WiFi beacon CSI
+
+### 4.1 PC2: start WiFi beacon TX
+
+```bash
+cd DT_sensing_fusion_WIFI5G
 source .venv_uhd/bin/activate
 
+python src/python/wifi_sensing/tx_wifi_beacon_usrp.py \
+  --serial <tx_usrp_serial>
+```
+
+The useful TX defaults are already configured in the script:
+
+```text
+freq = 2.412 GHz
+rate = 20 Msps
+gain = 20 dB
+antenna = TX/RX
+SSID = SENSING_WIFI
+BSSID = 02:11:22:33:44:55
+WiFi channel = 1
+TX period = 100 ms
+Beacon Interval field = 98 TU
+profile = router_like_wpa2
+num beacons = 5000
+```
+
+### 4.2 PC1: start WiFi online CSI RX
+
+```bash
+cd DT_sensing_fusion_WIFI5G
+source .venv_uhd/bin/activate
+
+python src/python/wifi_sensing/rx_wifi_beacon_csi_online_usrp.py \
+  --serial "<rx_usrp_serial>,num_recv_frames=512,recv_frame_size=8200"
+```
+
+The useful RX defaults are already configured in the script:
+
+```text
+freq = 2.412 GHz
+rate = 20 Msps
+gain = 35 dB
+antenna = RX2
+duration = 60 s
+block-ms = 200
+queue-blocks = 8
+max-drain-blocks = 4
+init-seconds = 1
+TX period = 100 ms
+seed/accept threshold = 0.10
+search radius = 5 ms
+output root = data/wifi_csi_datasets
+live JSON = results/wifi_online/live_wifi_rx_state.json
+```
+
+A good 60 s online run should produce roughly:
+
+```text
+~540-590 CSI packets
+0 RX overflows
+period mean close to 0.100 s
+```
+
+Example observed result in the tested setup:
+
+```text
+Detected CSI packets: 565
+Missed beacons: 32
+overflow_count: 0
+```
+
+### 4.3 Watch the WiFi live JSON
+
+```bash
+watch -n 0.5 cat results/wifi_online/live_wifi_rx_state.json
+```
+
+---
+
+## 5. Quick start: 5G online sensing
+
+Activate the environment:
+
+```bash
+cd DT_sensing_fusion_WIFI5G
+source .venv_uhd/bin/activate
+```
+
+Short local test without SCP:
+
+```bash
 python src/python/ssb_python/online_5g_python_cfo_json_scp.py \
-  --serial 34B73C3 \
+  --serial <rx_usrp_serial> \
   --freq 3541.44e6 \
   --rate 15.36e6 \
   --gain 60 \
@@ -162,356 +318,146 @@ python src/python/ssb_python/online_5g_python_cfo_json_scp.py \
   --progress-every 1
 ```
 
-Local JSON output:
+Local outputs:
 
 ```text
 results/online/live_inference_state_5G.json
-```
-
-Local Mitsuba XML output:
-
-```text
 results/online/live_person_sionna_scene.xml
 ```
 
 ---
 
-### I want to send the online JSON/XML to another machine
+## 6. Main scripts overview
 
-Read:
-
-```text
-README_5G_SSB_PYTHON_DEPLOYMENT.md
-```
-
-Use the `--remote-target` argument of:
-
-```text
-src/python/ssb_python/online_5g_python_cfo_json_scp.py
-```
-
-and if you want to export XML also, use --enable-mitsuba-export argument.
-
-If --remote-target is provided for the JSON and no explicit XML target is provided, the XML is automatically sent to the same remote directory using the default filename:
-
-```text
-live_person_sionna_scene.xml
-```
-
-Example:
-
-```bash
---remote-target "<user>@<ip-or-hostname>:<remote/path/live_inference_state_5G.json>"
-```
+| Area | Script | Purpose |
+|---|---|---|
+| 5G | `src/python/ssb_python/online_5g_python_cfo_json_scp.py` | Full Python 5G online inference, JSON/XML output, optional SCP |
+| 5G | `src/python/ssb_python/rxgrid_torch_inference.py` | Loads the 5G PyTorch checkpoint and runs inference |
+| 5G | `src/python/ssb_python/collect_labeled_rxgridssb_dataset_cfo.py` | Operator-friendly labeled 5G dataset collection |
+| 5G | `src/python/ssb_python/analyze_rxgrid_distributions.py` | Dataset amplitude/phase analysis |
+| WiFi | `src/python/wifi_sensing/tx_wifi_beacon_usrp.py` | USRP WiFi beacon transmitter |
+| WiFi | `src/python/wifi_sensing/rx_wifi_beacon_csi_online_usrp.py` | Online WiFi beacon CSI receiver |
+| WiFi | `src/python/wifi_sensing/rx_wifi_raw_capture_usrp.py` | Raw IQ capture for debugging/dataset fallback |
+| WiFi | `src/python/wifi_sensing/process_wifi_raw_capture_ltf_tracker.py` | Offline robust WiFi CSI extraction from raw IQ |
+| WiFi | `src/python/wifi_sensing/wifi_ltf_tracker.py` | L-LTF timing/tracking utilities |
+| WiFi | `src/python/wifi_sensing/wifi_csi.py` | WiFi CSI extraction utilities |
+| WiFi | `src/python/wifi_sensing/wifi_beacon_mac.py` | Beacon MAC MPDU generation |
+| WiFi | `src/python/wifi_sensing/wifi_legacy_ofdm.py` | Legacy OFDM PHY waveform generation |
 
 ---
 
-### I want to collect a new labeled dataset
+## 7. Dataset outputs
 
-Read:
-
-```text
-README_5G_SSB_PYTHON_DEPLOYMENT.md
-docs/DATASET_MODEL_JSON_GUIDE.md
-```
-
-Main script:
-
-```text
-src/python/ssb_python/collect_labeled_rxgridssb_dataset_cfo.py
-```
-
-Example for an empty scene:
-
-```bash
-cd DT_sensing_fusion
-source .venv_uhd/bin/activate
-
-python src/python/ssb_python/collect_labeled_rxgridssb_dataset_cfo.py \
-  --label empty \
-  --scene static \
-  --person-id none \
-  --orientation none \
-  --prep-sec 10 \
-  --duration-sec 30 \
-  --serial 34B73C3 \
-  --freq 3541.44e6 \
-  --rate 15.36e6 \
-  --gain 60 \
-  --duration-ms 20 \
-  --channel 0 \
-  --force-nid2 0 \
-  --enable-cfo-correction \
-  --cfo-warmup-iters 30 \
-  --cfo-correction-sign -1 \
-  --output-root data/python_ssb_datasets
-```
-
-Example for a target at `P5`:
-
-```bash
-python src/python/ssb_python/collect_labeled_rxgridssb_dataset_cfo.py \
-  --label P5 \
-  --scene static \
-  --person-id person_1 \
-  --orientation sideways \
-  --prep-sec 10 \
-  --duration-sec 30 \
-  --serial 34B73C3 \
-  --freq 3541.44e6 \
-  --rate 15.36e6 \
-  --gain 60 \
-  --duration-ms 20 \
-  --channel 0 \
-  --force-nid2 0 \
-  --enable-cfo-correction \
-  --cfo-warmup-iters 30 \
-  --cfo-correction-sign -1 \
-  --output-root data/python_ssb_datasets
-```
-
-The script gives a preparation countdown before collection starts, so the operator can move to the target position.
-
-Dataset output folder:
+### 7.1 5G dataset output
 
 ```text
 data/python_ssb_datasets/<label>/<session_id>/
+  session_data.h5
+  metadata.json
+  capture_log.csv
 ```
 
-Each session contains:
+Main H5 arrays:
 
 ```text
-session_data.h5
-metadata.json
-capture_log.csv
+dataSSB   complex64, shape [360, 6, N]
+rxGridSSB complex64, shape [240, 4, N]
+```
+
+### 7.2 WiFi dataset output
+
+```text
+data/wifi_csi_datasets/<label>/<session_id>/
+  session_data.h5
+  metadata.json
+  capture_log.csv
+```
+
+Main H5 arrays:
+
+```text
+csi       complex64, shape [N, 52]
+csi_amp   float32,   shape [N, 52]
+csi_phase float32,   shape [N, 52]
+ltf_metric
+cfo_hz
+rx_power_db
+timestamp_unix
+timestamp_usrp_rx
 ```
 
 ---
 
-### I want to understand the dataset format
+## 8. Model and inference status
 
-Read:
+### 8.1 5G
 
-```text
-docs/DATASET_MODEL_JSON_GUIDE.md
-```
-
-The key arrays are:
+The 5G online script supports:
 
 ```text
-dataSSB   = 360 x 6 x N
-rxGridSSB = 240 x 4 x N
+--inference-backend threshold
+--inference-backend torch
 ```
 
-The online model uses `rxGridSSB`.
+For real sensing, use the PyTorch backend with a trained checkpoint.
 
-For one sample:
+### 8.2 WiFi
+
+The WiFi online RX currently supports:
 
 ```text
-rxGridSSB = 240 subcarriers x 4 OFDM symbols
+--inference-backend none
+--inference-backend threshold
 ```
 
-For the current PyTorch model, this complex grid is converted to:
+The threshold backend is a placeholder that writes label/confidence fields into the JSON. It is useful for testing the Digital Twin interface before training a real WiFi model.
 
-```text
-[2, 240, 4]
-channel 0 = abs(rxGridSSB)
-channel 1 = angle(rxGridSSB)
-```
-
----
-
-### I want to test a model on a saved dataset
-
-Read:
-
-```text
-docs/DATASET_MODEL_JSON_GUIDE.md
-```
-
-Main script:
-
-```text
-src/python/ssb_python/test_rxgrid_torch_checkpoint_on_h5.py
-```
-
-Example:
+Default placeholder inference:
 
 ```bash
-LAST_H5="$(find data/python_ssb_datasets -name session_data.h5 | sort | tail -n 1)"
+python src/python/wifi_sensing/rx_wifi_beacon_csi_online_usrp.py \
+  --serial "<rx_usrp_serial>,num_recv_frames=512,recv_frame_size=8200" \
+  --inference-backend threshold
+```
 
-python src/python/ssb_python/test_rxgrid_torch_checkpoint_on_h5.py \
-  --model-pt results/binary_empty_vs_P5_rx/model_rxGridSSB/model.pt \
-  --input-h5 "$LAST_H5" \
-  --max-samples 30
+Future model workflow:
+
+```text
+1. Collect labeled WiFi CSI sessions.
+2. Train a model on csi_amp/csi_phase or complex CSI features.
+3. Add a torch backend for WiFi inference.
+4. Run RX with --model-path path/to/model.pt.
 ```
 
 ---
 
-### I want to replace the model
-
-Read:
-
-```text
-README_5G_SSB_PYTHON_DEPLOYMENT.md
-docs/DATASET_MODEL_JSON_GUIDE.md
-```
-
-The online script accepts another checkpoint with:
-
-```bash
---torch-model path/to/new/model.pt
-```
-
-Example:
-
-```bash
-python src/python/ssb_python/online_5g_python_cfo_json_scp.py \
-  ... \
-  --inference-backend torch \
-  --torch-model results/my_new_model/model.pt
-```
-
-The current loader expects a checkpoint containing:
-
-```text
-model_state_dict
-mean
-std
-input_shape = [2, 240, 4]
-complex_mode = abs_phase
-classes = [...]
-```
-
-If the new model uses the same architecture and input format, no code change is needed.
-
-If the new model uses a different architecture or different input channels, update:
-
-```text
-src/python/ssb_python/rxgrid_torch_inference.py
-```
-
----
-
-### I want to inspect whether a captured dataset looks stable
-
-Read:
-
-```text
-docs/DATASET_MODEL_JSON_GUIDE.md
-```
-
-Main script:
-
-```text
-src/python/ssb_python/analyze_rxgrid_distributions.py
-```
-
-Example:
-
-```bash
-LAST_H5="$(find data/python_ssb_datasets -name session_data.h5 | sort | tail -n 1)"
-
-python src/python/ssb_python/analyze_rxgrid_distributions.py \
-  --input "$LAST_H5" \
-  --dataset rxGridSSB \
-  --label python_dataset
-```
-
-Useful plots include:
-
-```text
-amplitude histogram
-phase histogram
-IQ scatter
-mean amplitude heatmap
-mean amplitude by subcarrier
-mean amplitude by OFDM symbol
-```
-
----
-
-### I want to compare with the old MATLAB reference
-
-This is not needed for normal deployment.
-
-For historical validation and comparison only, see:
-
-```text
-run_python_matlab_interleaved_capture.sh
-src/python/ssb_python/compare_interleaved_python_matlab.py
-```
-
-MATLAB was used during development to verify that the Python SSB extraction produced a consistent `rxGridSSB` representation. The current practical deployment path does not require MATLAB.
-
----
-
-### I want the old MATLAB/TCP online notes
-
-Read:
-
-```text
-README_online_ssB_empty_p5.md
-```
-
-This is legacy documentation. It describes the previous online flow:
-
-```text
-MATLAB capture
-MATLAB rxGridSSB extraction
-TCP to Python
-Python inference
-JSON/SCP
-```
-
-This flow is kept for reference, but it is no longer the recommended deployment path.
-
----
-
-## 4. Main scripts overview
-
-| Script | Purpose |
-|---|---|
-| `src/python/ssb_python/online_5g_python_cfo_json_scp.py` | Full Python online inference, JSON output, optional SCP |
-| `src/python/ssb_python/rxgrid_torch_inference.py` | Loads the PyTorch `.pt` checkpoint and runs inference |
-| `src/python/ssb_python/collect_labeled_rxgridssb_dataset_cfo.py` | Operator-friendly labeled dataset collection |
-| `src/python/ssb_python/capture_online_rxgridssb_dataset_cfo.py` | Lower-level CFO-corrected online dataset capture |
-| `src/python/ssb_python/test_rxgrid_torch_checkpoint_on_h5.py` | Tests a model checkpoint on a saved H5 dataset |
-| `src/python/ssb_python/analyze_rxgrid_distributions.py` | Plots amplitude/phase statistics for saved datasets |
-| `src/python/ssb_python/capture_iq_blocks_uhd.py` | Raw IQ capture for low-level debugging |
-| `src/python/ssb_python/compare_interleaved_python_matlab.py` | Historical Python/MATLAB comparison tool |
-
----
-
-## 5. Recommended new-factory workflow
-
-For a new factory or deployment scenario:
-
-```text
-1. Clone the repository on the target computer.
-2. Install UHD and create the Python UHD environment.
-3. Connect the USRP B210 and verify that UHD detects it.
-4. Adjust USRP parameters if needed:
-   frequency, sample rate, gain, channel, NID2.
-5. Decide the target classes:
-   empty, P1, P2, P3, person, no_person, etc.
-6. Collect labeled datasets with collect_labeled_rxgridssb_dataset_cfo.py.
-7. Inspect the datasets with analyze_rxgrid_distributions.py.
-8. Train a new model using the collected Python rxGridSSB datasets.
-9. Save the model checkpoint in the expected format.
-10. Run online_5g_python_cfo_json_scp.py with --torch-model pointing to the new checkpoint.
-11. Set --remote-target to the desired Digital Twin or external machine.
-12. Validate that the receiver of the JSON reads the expected fields.
-```
-
----
-
-## 6. Quick links
+## 9. Documentation map
 
 | Goal | Read this |
 |---|---|
-| Deploy from a new computer | `README_5G_SSB_PYTHON_DEPLOYMENT.md` |
-| Run Python-only online inference | `README_online_python_5g.md` |
-| Understand dataset/model/JSON format | `docs/DATASET_MODEL_JSON_GUIDE.md` |
-| Run step-by-step commands | `docs/RUNBOOK_PYTHON_ONLINE_5G.md` |
-| Historical MATLAB/TCP notes | `README_online_ssB_empty_p5.md` |
+| Overall repository overview | `README.md` |
+| 5G deployment from a new computer | `README_5G_SSB_PYTHON_DEPLOYMENT.md` |
+| 5G Python-only online notes | `README_online_python_5g.md` |
+| WiFi quick start and command reference | `README_WIFI_BEACON_CSI.md` |
+| WiFi technical pipeline | `docs/WIFI_BEACON_CSI_PIPELINE.md` |
+| Legacy MATLAB/TCP 5G notes | `README_online_ssB_empty_p5.md` |
+| Python environment notes | `requirements/README.md` |
+
+---
+
+## 10. Git policy
+
+Do not commit generated datasets or runtime outputs:
+
+```text
+data/python_ssb_datasets/
+data/wifi_csi_datasets/
+results/online/
+results/wifi_debug/
+results/wifi_online/
+logs/
+__pycache__/
+*.pyc
+```
+
+Commit code, configuration files, trained demo checkpoints if intentionally included, and documentation only.
