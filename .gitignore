@@ -129,3 +129,4 @@ data/python_ssb_datasets/
 data/wifi_csi_datasets/
 results/wifi_debug/
 results/wifi_online/
+results/wlan_sensing_dmg/
