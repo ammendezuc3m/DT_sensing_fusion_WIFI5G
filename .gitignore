@@ -78,7 +78,6 @@ results/p5_signature_override_check/
 results/python_iq_inspection/
 
 # Generated Python DSP prototype results
-results/python_iq_inspection/
 results/python_pss_detection/
 
 # Generated Python dataSSB extraction results
@@ -91,32 +90,13 @@ results/python_datassb_batch/
 results/python_online_profile/
 results/python_online_rxgridssb_dataset/
 results/python_rxgrid_distribution/
-results/python_datassb_batch/
 
 # Generated Python CFO, online, comparison and interleaved results
-results/python_online_profile/
-results/python_online_rxgridssb_dataset/
 results/python_online_rxgridssb_dataset_cfo/
-results/python_rxgrid_distribution/
 results/python_matlab_rxgrid_compare/
-results/python_datassb_batch/
-results/python_datassb_extract/
-results/python_pss_detection/
-results/python_iq_inspection/
 logs/python_matlab_interleaved_*/
 
 # Generated Python online / CFO / comparison outputs
-results/online/
-results/python_online_profile/
-results/python_online_rxgridssb_dataset/
-results/python_online_rxgridssb_dataset_cfo/
-results/python_rxgrid_distribution/
-results/python_matlab_rxgrid_compare/
-results/python_datassb_batch/
-results/python_datassb_extract/
-results/python_pss_detection/
-results/python_iq_inspection/
-logs/python_matlab_interleaved_*/
 
 # Raw generated captures
 data/python_iq_captures/
@@ -138,11 +118,20 @@ results/wlan_sensing_dmg/
 results/wifi_models/
 
 # Local WiFi runtime outputs
-results/wifi_debug/
-results/wifi_online/
 
 # Local RF captures
 *.iq
 *.cf32
 *.sc16
 *.raw
+
+# WiFi sensing generated captures and diagnostics
+results/wifi_matlab_rx/*.mat
+results/wifi_matlab_rx/*.txt
+results/wifi_matlab_rx/*.csv
+results/wifi_matlab_rx/*.json
+results/wifi_rx/*.npz
+
+# MATLAB generated files
+slprj/
+codegen/

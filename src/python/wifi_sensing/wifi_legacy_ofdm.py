@@ -129,23 +129,54 @@ def generate_l_ltf() -> np.ndarray:
     return np.concatenate([long64[-32:], long64, long64]).astype(np.complex64)
 
 
+PILOT_POLARITY = [
+    1, 1, 1, 1, -1, -1, -1, 1, -1, -1, -1, -1, 1, 1, -1, 1, -1, -1, 1, 1, -1, 1, 1, -1, 1, 1, 1, 1, 1, 1, -1, 1, 1, 1, -1, 1, 1, -1, -1, 1, 1, 1, -1, 1, -1, -1, -1, 1, -1, 1, -1, -1, 1, -1, -1, 1, 1, 1, 1, 1, -1, -1, 1, 1, -1, -1, 1, -1, 1, -1, 1, 1, -1, -1, -1, 1, 1, -1, -1, -1, -1, 1, -1, -1, 1, -1, 1, 1, 1, 1, -1, 1, -1, 1, -1, 1, -1, -1, -1, -1, -1, 1, -1, 1, 1, -1, 1, -1, 1, 1, 1, -1, -1, 1, -1, -1, -1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, 1, 1
+]
+
+
 def pilot_values(symbol_index: int) -> dict[int, complex]:
-    # First implementation: fixed legacy pilot values.
-    # If Wireshark decoding is unstable, the first thing to refine is pilot polarity.
-    return {-21: 1 + 0j, -7: 1 + 0j, 7: 1 + 0j, 21: -1 + 0j}
+    """Legacy OFDM pilot values.
+
+    symbol_index:
+        0 = L-SIG
+        1 = first DATA symbol
+        2 = second DATA symbol
+        ...
+
+    The four base pilots are [1, 1, 1, -1], multiplied by the
+    127-symbol legacy pilot-polarity sequence.
+    """
+    polarity = PILOT_POLARITY[symbol_index % len(PILOT_POLARITY)]
+
+    return {
+        -21: complex(polarity, 0),
+        -7: complex(polarity, 0),
+        7: complex(polarity, 0),
+        21: complex(-polarity, 0),
+    }
 
 
 def convolutional_encode(bits: list[int]) -> list[int]:
+    """IEEE 802.11 convolutional encoder, K=7, rate 1/2.
+
+    Generator polynomials:
+        G0 = 133 octal
+        G1 = 171 octal
+
+    The newest input bit occupies bit 6 of the 7-bit shift register.
+    """
     g0 = 0o133
     g1 = 0o171
     state = 0
     out: list[int] = []
 
     for bit in bits:
-        state = ((state << 1) | (int(bit) & 1)) & 0x7F
+        # Shift toward the least-significant bit and insert the
+        # newest input bit at the most-significant register position.
+        state = ((state >> 1) | ((int(bit) & 1) << 6)) & 0x7F
 
-        for g in (g0, g1):
-            out.append((state & g).bit_count() & 1)
+        out.append((state & g0).bit_count() & 1)
+        out.append((state & g1).bit_count() & 1)
 
     return out
 
@@ -165,7 +196,16 @@ def interleave_48(bits: list[int]) -> list[int]:
 
 
 def bpsk_map(bits: list[int]) -> np.ndarray:
-    return np.array([1.0 if int(b) == 0 else -1.0 for b in bits], dtype=np.complex64)
+    """Map encoded bits to legacy WLAN BPSK symbols.
+
+    IEEE 802.11/WLAN Toolbox convention:
+        bit 0 -> -1
+        bit 1 -> +1
+    """
+    return np.array(
+        [-1.0 if int(b) == 0 else 1.0 for b in bits],
+        dtype=np.complex64,
+    )
 
 
 def make_signal_bits(psdu_length_bytes: int) -> list[int]:
