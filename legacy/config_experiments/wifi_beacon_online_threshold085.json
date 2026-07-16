@@ -1,0 +1,64 @@
+{
+  "pipeline": {
+    "mode": "online",
+    "waveform": "wifi_nonht",
+    "profile": "wifi_beacon_6mbps",
+    "block_samples": 200000,
+    "overlap_samples": 10000,
+    "iq_queue_capacity": 32
+  },
+  "input": {
+    "driver": "uhd",
+    "device_args": "serial=34B73C3",
+    "channel": 0,
+    "sample_rate_hz": 20000000,
+    "center_frequency_hz": 2462000000,
+    "gain_db": 35,
+    "bandwidth_hz": 20000000,
+    "antenna": "RX2",
+    "clock_source": "internal",
+    "time_source": "internal",
+    "cpu_format": "fc32",
+    "wire_format": "sc16",
+    "receive_timeout_seconds": 1.0
+  },
+  "output": {
+    "console": true,
+    "write_features": false,
+    "publisher": "none"
+  },
+  "waveform_config": {
+    "preamble_reference": "tests/golden/references/wifi_nonht_preamble_cf32.dat",
+    "lltf_frequency_reference": "tests/golden/references/wifi_nonht_lltf_frequency_cf32.dat",
+    "detector": {
+      "metric_threshold": 0.85,
+      "minimum_plateau": 32,
+      "minimum_power": 1e-07,
+      "minimum_packet_spacing": 2000
+    },
+    "synchronizer": {
+      "minimum_preamble_metric": 0.55,
+      "maximum_absolute_cfo_hz": 200000
+    },
+    "filters": {
+      "require_valid_fcs": true,
+      "require_beacon": true,
+      "ssid": "USRP_CHANNEL11",
+      "bssid": "02:11:22:33:44:55",
+      "vendor_oui": "02:11:22",
+      "vendor_type": 1,
+      "vendor_magic": "ALBSENS",
+      "vendor_version": 1,
+      "transmitter_id": 1,
+      "experiment_id": 1
+    },
+    "profile_id": 1,
+    "duplicate_tolerance_samples": 512,
+    "include_psdu": false,
+    "data_decoder": {
+      "scrambler_seed": 93,
+      "require_zero_service": true,
+      "require_zero_encoded_tail": true
+    }
+  }
+}

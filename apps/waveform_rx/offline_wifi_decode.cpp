@@ -2,15 +2,20 @@
 #include "io/cf32_reader.hpp"
 #include "io/csi_csv_writer.hpp"
 #include "io/constellation_csv_writer.hpp"
+#include "io/psdu_writer.hpp"
 #include "waveforms/wifi_nonht/packet_detector.hpp"
 #include "waveforms/wifi_nonht/synchronizer.hpp"
 #include "waveforms/wifi_nonht/channel_estimator.hpp"
 #include "waveforms/wifi_nonht/legacy_signal_decoder.hpp"
 #include "waveforms/wifi_nonht/data_symbol_extractor.hpp"
+#include "waveforms/wifi_nonht/data_decoder.hpp"
+#include "waveforms/wifi_nonht/beacon_parser.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <complex>
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -63,6 +68,34 @@ struct RunningStats {
     }
 };
 
+std::string sanitize_text(
+    const std::string& input
+) {
+    std::string output;
+    output.reserve(input.size());
+
+    constexpr char hex[] = "0123456789ABCDEF";
+
+    for (const unsigned char value : input) {
+        if (
+            value >= 32U
+            && value <= 126U
+            && value != '\\'
+        ) {
+            output.push_back(
+                static_cast<char>(value)
+            );
+            continue;
+        }
+
+        output += "\\x";
+        output.push_back(hex[(value >> 4U) & 0x0FU]);
+        output.push_back(hex[value & 0x0FU]);
+    }
+
+    return output;
+}
+
 void print_usage(const char* executable) {
     std::cerr
         << "Uso:\n  "
@@ -71,14 +104,15 @@ void print_usage(const char* executable) {
         << " <preambulo_cf32.dat>"
         << " <lltf_frequency_cf32.dat>"
         << " <salida_csi.csv>"
-        << " <salida_constelacion.csv>\n";
+        << " <salida_constelacion.csv>"
+        << " <directorio_psdu>\n";
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
     try {
-        if (argc != 6) {
+        if (argc != 7) {
             print_usage(argv[0]);
             return 2;
         }
@@ -109,6 +143,10 @@ int main(int argc, char** argv) {
 
         const std::filesystem::path constellation_csv_path{
             argv[5]
+        };
+
+        const std::filesystem::path psdu_directory_path{
+            argv[6]
         };
 
         const auto preamble_reference =
@@ -185,6 +223,23 @@ int main(int argc, char** argv) {
         const sensing::wifi_nonht::DataSymbolExtractor
             data_symbol_extractor;
 
+        sensing::wifi_nonht::DataDecoderConfig
+            data_decoder_config;
+
+        data_decoder_config.scrambler_seed = 0x5D;
+        data_decoder_config.require_zero_service = true;
+        data_decoder_config.require_zero_encoded_tail = true;
+
+        const sensing::wifi_nonht::DataDecoder
+            data_decoder{data_decoder_config};
+
+        const sensing::wifi_nonht::BeaconParser
+            beacon_parser;
+
+        sensing::io::PsduWriter psdu_writer{
+            psdu_directory_path
+        };
+
         sensing::io::CsiCsvWriter csi_writer{
             output_csv_path
         };
@@ -213,6 +268,13 @@ int main(int argc, char** argv) {
         std::uint64_t confirmed_packets = 0U;
         std::uint64_t valid_channel_estimates = 0U;
         std::uint64_t valid_lsig_packets = 0U;
+        std::uint64_t valid_data_packets = 0U;
+        std::uint64_t valid_fcs_packets = 0U;
+        std::uint64_t parsed_beacons = 0U;
+        std::uint64_t matching_ssid = 0U;
+        std::uint64_t matching_bssid = 0U;
+        std::uint64_t matching_vendor = 0U;
+        std::uint64_t matching_vendor_fields = 0U;
         std::size_t chunk_index = 0U;
 
         std::uint64_t last_global_candidate =
@@ -372,6 +434,122 @@ int main(int argc, char** argv) {
                     data_symbols
                 );
 
+                const auto data =
+                    data_decoder.decode(
+                        data_symbols,
+                        lsig
+                    );
+
+                if (!data.valid) {
+                    if (valid_lsig_packets <= 10U) {
+                        std::cout
+                            << "DATA invalido"
+                            << " | packet="
+                            << valid_lsig_packets
+                            << " | service="
+                            << data.service_valid
+                            << " | encoded_tail="
+                            << data.encoded_tail_valid
+                            << " | psdu_bytes="
+                            << data.psdu_bytes.size()
+                            << " | expected="
+                            << lsig.length_bytes
+                            << '\n';
+                    }
+
+                    continue;
+                }
+
+                ++valid_data_packets;
+
+                const auto beacon =
+                    beacon_parser.parse(
+                        data.psdu_bytes
+                    );
+
+                if (beacon.fcs_valid) {
+                    ++valid_fcs_packets;
+                }
+
+                if (beacon.valid) {
+                    ++parsed_beacons;
+                }
+
+                if (beacon.ssid == "USRP_CHANNEL11") {
+                    ++matching_ssid;
+                }
+
+                if (
+                    beacon.bssid_string
+                    == "02:11:22:33:44:55"
+                ) {
+                    ++matching_bssid;
+                }
+
+                if (beacon.has_vendor_magic) {
+                    ++matching_vendor;
+                }
+
+                if (
+                    beacon.vendor_valid
+                    && beacon.vendor_oui
+                        == std::array<std::uint8_t,3>{
+                            0x02U,
+                            0x11U,
+                            0x22U
+                        }
+                    && beacon.vendor_type == 1U
+                    && beacon.vendor_version == 1U
+                    && beacon.transmitter_id.value_or(0U)
+                        == 1U
+                    && beacon.experiment_id.value_or(0U)
+                        == 1U
+                ) {
+                    ++matching_vendor_fields;
+                }
+
+                /*
+                 * En este banco de pruebas guardamos todas
+                 * las PSDU DATA válidas, aunque fallen FCS,
+                 * para poder inspeccionarlas.
+                 */
+                psdu_writer.write(
+                    valid_data_packets,
+                    data.psdu_bytes
+                );
+
+                std::cout
+                    << "BEACON"
+                    << " | data_packet="
+                    << valid_data_packets
+                    << " | fcs="
+                    << beacon.fcs_valid
+                    << " | valid="
+                    << beacon.valid
+                    << " | seq="
+                    << beacon.sequence_number
+                    << " | ssid="
+                    << sanitize_text(beacon.ssid)
+                    << " | bssid="
+                    << beacon.bssid_string
+                    << " | vendor="
+                    << beacon.vendor_valid
+                    << " | vendor_type="
+                    << static_cast<unsigned int>(
+                        beacon.vendor_type
+                    )
+                    << " | vendor_version="
+                    << static_cast<unsigned int>(
+                        beacon.vendor_version
+                    )
+                    << " | tx_id="
+                    << beacon.transmitter_id.value_or(0U)
+                    << " | experiment_id="
+                    << beacon.experiment_id.value_or(0U)
+                    << " | packet_counter="
+                    << beacon.packet_counter.value_or(0U)
+                    << '\n';
+
                 const std::uint64_t global_packet_start =
                     processing_start + sync.packet_start;
 
@@ -491,7 +669,21 @@ int main(int argc, char** argv) {
             << "CSI validas          : "
             << valid_channel_estimates << '\n'
             << "L-SIG validos        : "
-            << valid_lsig_packets << '\n';
+            << valid_lsig_packets << '\n'
+            << "DATA validos         : "
+            << valid_data_packets << '\n'
+            << "FCS validos          : "
+            << valid_fcs_packets << '\n'
+            << "Beacons parseados    : "
+            << parsed_beacons << '\n'
+            << "SSID coincidente     : "
+            << matching_ssid << '\n'
+            << "BSSID coincidente    : "
+            << matching_bssid << '\n'
+            << "Vendor ALBSENS       : "
+            << matching_vendor << '\n'
+            << "Vendor campos validos: "
+            << matching_vendor_fields << '\n';
 
         return 0;
 
