@@ -455,3 +455,97 @@ __pycache__/
 ```
 
 Commit code, configuration files, trained demo checkpoints if intentionally included, and documentation only.
+
+---
+
+## Real-time WiFi CSI receiver in C++
+
+A modular C++ receiver is available for online WiFi Non-HT beacon
+reception using a USRP B210.
+
+Validated processing chain:
+
+```text
+USRP B210
+  -> UHD continuous IQ reception at 20 Msps
+  -> WiFi Non-HT packet detection
+  -> synchronization and DATA decoding
+  -> beacon, FCS and Vendor IE validation
+  -> 52-subcarrier complex CSI
+  -> FeatureFrame
+  -> local JSONL output in real time
+Build:
+
+cmake \
+  -S src/cpp \
+  -B build/cpp \
+  -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release
+
+cmake --build build/cpp --parallel
+Run:
+
+./build/cpp/online_waveform_pipeline \
+  --config configs/pipelines/wifi_beacon_online.json
+
+Real-time output:
+
+results/csi/live/latest.jsonl
+
+Watch newly received CSI frames:
+
+tail -n 0 -F results/csi/live/latest.jsonl \
+  | jq -c '.complex_features | map([.real, .imag])'
+
+Detailed documentation:
+
+docs/REALTIME_CSI.md
+docs/DEVELOPMENT_AND_CLEANUP.md
+
+---
+
+## Real-time WiFi CSI receiver in C++
+
+A modular C++ receiver is available for online WiFi Non-HT beacon
+reception using a USRP B210.
+
+Validated processing chain:
+
+```text
+USRP B210
+  -> UHD continuous IQ reception at 20 Msps
+  -> WiFi Non-HT packet detection
+  -> synchronization and DATA decoding
+  -> beacon, FCS and Vendor IE validation
+  -> 52-subcarrier complex CSI
+  -> FeatureFrame
+  -> local JSONL output in real time
+
+Build:
+
+cmake \
+  -S src/cpp \
+  -B build/cpp \
+  -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release
+
+cmake --build build/cpp --parallel
+
+Run:
+
+./build/cpp/online_waveform_pipeline \
+  --config configs/pipelines/wifi_beacon_online.json
+
+Real-time output:
+
+results/csi/live/latest.jsonl
+
+Watch newly received CSI frames:
+
+tail -n 0 -F results/csi/live/latest.jsonl \
+  | jq -c '.complex_features | map([.real, .imag])'
+
+Detailed documentation:
+
+docs/REALTIME_CSI.md
+docs/DEVELOPMENT_AND_CLEANUP.md

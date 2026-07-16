@@ -135,3 +135,26 @@ results/wifi_rx/*.npz
 # MATLAB generated files
 slprj/
 codegen/
+
+# C++ build
+build/
+
+# Real-time CSI runtime outputs
+results/runtime/
+results/csi/live/
+results/csi/sessions/
+results/wifi_beacon_count/
+results/wifi_rx/
+results/wifi_rx_v2/
+
+# Python virtual environments
+.venv/
+.venv_*/
+**/venv/
+**/venvs/
+**/site-packages/
+
+# Large WiFi golden IQ captures
+tests/golden/**/*.dat
+tests/golden/**/*.bin
+tests/golden/**/*.sc16
