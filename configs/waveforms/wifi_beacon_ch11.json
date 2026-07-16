@@ -1,0 +1,44 @@
+{
+  "protocol_version": 1,
+  "waveform_type": "WIFI_NONHT_BEACON",
+  "waveform_type_id": 1,
+  "profile_id": 1,
+
+  "rf": {
+    "center_frequency_hz": 2462000000,
+    "sample_rate_hz": 20000000,
+    "wifi_channel": 11
+  },
+
+  "phy": {
+    "format": "NON_HT_OFDM",
+    "bandwidth_hz": 20000000
+  },
+
+  "mac": {
+    "ssid": "USRP_CHANNEL11",
+    "bssid": "02:11:22:33:44:55",
+    "beacon_interval_tu": 100
+  },
+
+  "experiment": {
+    "transmitter_id": 1,
+    "experiment_id": 1,
+    "initial_packet_counter": 0
+  },
+
+  "tx": {
+    "usrp_serial": "34B739F",
+    "channel": 0,
+    "antenna": "TX/RX",
+    "gain_db": 76,
+    "digital_amplitude": 0.5
+  },
+
+  "rx": {
+    "usrp_serial": "34B73C3",
+    "channel": 0,
+    "antenna": "RX2",
+    "gain_db": 55
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "protocol_version": 1,
+  "waveform_types": {
+    "1": "WIFI_NONHT_BEACON",
+    "2": "WIFI_NDP",
+    "3": "CUSTOM_OFDM",
+    "4": "BF_TRAINING",
+    "5": "NR_SSB",
+    "6": "RAW_REFERENCE_SEQUENCE"
+  }
+}
