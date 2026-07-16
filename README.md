@@ -549,3 +549,51 @@ Detailed documentation:
 
 docs/REALTIME_CSI.md
 docs/DEVELOPMENT_AND_CLEANUP.md
+
+### Binary WiFi CSI output
+
+The real-time WiFi receiver writes validated CSI vectors in two synchronized formats:
+
+```text
+results/csi/live/latest.jsonl
+results/csi/live/latest_csi.cf32
+latest.jsonl contains metadata such as packet counter, timestamp, SNR,
+CFO, transmitter ID and experiment ID.
+
+latest_csi.cf32 contains only the complex CSI vectors. Each validated
+WiFi beacon contributes exactly 52 complex64 values:
+
+frame 0: 52 complex64 samples
+frame 1: 52 complex64 samples
+frame 2: 52 complex64 samples
+...
+
+The binary layout for each complex value is:
+
+float32 real
+float32 imaginary
+
+Load all CSI frames with NumPy:
+
+import numpy as np
+
+csi = np.fromfile(
+    "results/csi/live/latest_csi.cf32",
+    dtype=np.complex64,
+).reshape(-1, 52)
+
+print("Frames:", csi.shape[0])
+print("Subcarriers:", csi.shape[1])
+print("Last CSI:", csi[-1])
+
+The row at position i in latest_csi.cf32 corresponds to the line at
+position i in latest.jsonl.
+
+Packet counters must not be used directly as row indexes because some
+beacons may not be decoded. For example:
+
+packet counters: 6, 7, 9, 10
+binary rows:     0, 1, 2, 3
+
+The binary CSI file is flushed after every validated beacon, so another
+local process can read the new data in real time.

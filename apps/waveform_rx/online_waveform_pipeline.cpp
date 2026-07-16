@@ -1,6 +1,7 @@
 #include "common/bounded_queue.hpp"
 #include "common/iq_block.hpp"
 #include "io/feature_jsonl_writer.hpp"
+#include "io/csi_raw_writer.hpp"
 #include "pipeline/waveform_factory.hpp"
 #include "pipeline/waveform_processor.hpp"
 #include "sources/uhd_iq_source.hpp"
@@ -313,6 +314,34 @@ int main(int argc, char** argv) {
                 );
         }
 
+        std::unique_ptr<sensing::io::CsiRawWriter>
+            csi_raw_writer;
+
+        std::filesystem::path csi_raw_path;
+
+        const bool write_csi_raw =
+            output_config.value(
+                "write_csi_raw",
+                false
+            );
+
+        if (write_csi_raw) {
+            csi_raw_path =
+                output_config.value(
+                    "csi_raw_path",
+                    std::string{
+                        "results/csi/live/latest_csi.cf32"
+                    }
+                );
+
+            csi_raw_writer =
+                std::make_unique<
+                    sensing::io::CsiRawWriter
+                >(
+                    csi_raw_path
+                );
+        }
+
         std::unique_ptr<sensing::IFeaturePublisher>
             publisher;
 
@@ -391,6 +420,13 @@ int main(int argc, char** argv) {
             << (
                 feature_writer
                 ? feature_path.string()
+                : std::string{"disabled"}
+            )
+            << '\n'
+            << "Salida CSI raw    : "
+            << (
+                csi_raw_writer
+                ? csi_raw_path.string()
                 : std::string{"disabled"}
             )
             << '\n'
@@ -696,6 +732,20 @@ int main(int argc, char** argv) {
                                 feature_writer->write(frame);
 
                                 ++online_stats.local_written;
+                            }
+
+                            if (csi_raw_writer) {
+                                if (
+                                    frame.complex_features.size()
+                                    != 52U
+                                ) {
+                                    throw std::runtime_error(
+                                        "FeatureFrame WiFi con CSI "
+                                        "distinto de 52"
+                                    );
+                                }
+
+                                csi_raw_writer->write(frame);
                             }
 
                             if (publisher) {

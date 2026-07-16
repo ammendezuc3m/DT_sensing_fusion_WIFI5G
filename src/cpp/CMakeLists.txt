@@ -29,6 +29,7 @@ add_library(
     sources/uhd_iq_source.cpp
     publishers/zeromq_feature_publisher.cpp
     io/feature_jsonl_writer.cpp
+    io/csi_raw_writer.cpp
     pipeline/waveform_factory.cpp
     io/cf32_reader.cpp
     io/csi_csv_writer.cpp

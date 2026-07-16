@@ -115,3 +115,70 @@ local_written=frames
 cola sin crecimiento sostenido
 latencia < 102,4 ms
 ```
+
+## Direct binary CSI output
+
+In addition to the JSONL output, the receiver writes the complex CSI
+vectors directly to:
+
+```text
+results/csi/live/latest_csi.cf32
+Each validated beacon produces:
+
+1 new line in latest.jsonl
+52 new complex64 values in latest_csi.cf32
+
+Each complex value is stored as:
+
+float32 real
+float32 imaginary
+
+The binary file can be loaded directly as a matrix:
+
+import numpy as np
+
+csi = np.fromfile(
+    "results/csi/live/latest_csi.cf32",
+    dtype=np.complex64,
+)
+
+if csi.size % 52 != 0:
+    raise RuntimeError(
+        "The CSI file does not contain complete frames"
+    )
+
+csi = csi.reshape(-1, 52)
+
+print("Shape:", csi.shape)
+print("Last CSI:", csi[-1])
+
+Row i in the binary file corresponds to line i in the JSONL file.
+
+The correspondence can be validated with:
+
+import json
+import numpy as np
+
+with open(
+    "results/csi/live/latest.jsonl",
+    encoding="utf-8",
+) as file:
+    metadata = [
+        json.loads(line)
+        for line in file
+        if line.strip()
+    ]
+
+csi = np.fromfile(
+    "results/csi/live/latest_csi.cf32",
+    dtype=np.complex64,
+).reshape(-1, 52)
+
+print("JSONL frames:", len(metadata))
+print("Raw CSI frames:", csi.shape[0])
+
+assert len(metadata) == csi.shape[0]
+
+The receiver writes one binary CSI frame only after the beacon has
+passed packet detection, synchronization, PHY decoding, FCS validation,
+BSSID filtering, and Vendor IE validation.

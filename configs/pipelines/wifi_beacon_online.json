@@ -26,7 +26,10 @@
     "console": true,
     "write_features": true,
     "feature_path": "results/csi/live/latest.jsonl",
-    "publisher": "none"
+    "publisher": "none",
+    "write_csi_raw": true,
+    "csi_raw_path": "results/csi/live/latest_csi.cf32",
+    "csi_elements_per_frame": 52
   },
   "waveform_config": {
     "preamble_reference": "tests/golden/references/wifi_nonht_preamble_cf32.dat",
