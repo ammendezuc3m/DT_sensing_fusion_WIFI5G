@@ -16,6 +16,41 @@ namespace {
 constexpr std::size_t kCyclicPrefixLength = 32;
 constexpr std::size_t kLltfTotalLength = 160;
 
+constexpr float kKnownLltfMinimumMagnitudeSquared =
+    1.0e-8F;
+
+/*
+ * Subportadoras activas legacy WiFi en orden físico:
+ *
+ * -26, ..., -1, +1, ..., +26
+ *
+ * No se incluyen DC ni guardas.
+ */
+constexpr std::array<int,kWifiUsedSubcarriers>
+    kUsedSubcarriers = {
+        -26, -25, -24, -23, -22, -21, -20,
+        -19, -18, -17, -16, -15, -14, -13,
+        -12, -11, -10, -9, -8, -7, -6,
+        -5, -4, -3, -2, -1,
+         1, 2, 3, 4, 5, 6, 7,
+         8, 9, 10, 11, 12, 13, 14,
+         15, 16, 17, 18, 19, 20, 21,
+         22, 23, 24, 25, 26
+    };
+
+std::size_t fft_bin(const int subcarrier) {
+    if (subcarrier >= 0) {
+        return static_cast<std::size_t>(
+            subcarrier
+        );
+    }
+
+    return static_cast<std::size_t>(
+        static_cast<int>(kWifiFftLength)
+        + subcarrier
+    );
+}
+
 std::array<std::complex<float>,kWifiFftLength>
 fft64(
     const std::array<std::complex<float>,kWifiFftLength>& input
@@ -154,52 +189,72 @@ ChannelEstimate ChannelEstimator::estimate(
 
     float signalPower = 0.0F;
     float noisePower = 0.0F;
-    std::size_t usedIndex = 0U;
 
-    for (std::size_t k = 0;
-         k < kWifiFftLength;
-         ++k) {
+    /*
+     * Inicializar los 64 bins de la respuesta de canal.
+     * DC y las guardas permanecen a cero.
+     */
+    for (std::size_t bin = 0;
+         bin < kWifiFftLength;
+         ++bin) {
+
+        result.frequency_response[bin] = {
+            0.0F,
+            0.0F
+        };
+    }
+
+    /*
+     * Construir el CSI exclusivamente con:
+     *
+     * -26, ..., -1, +1, ..., +26.
+     */
+    for (std::size_t usedIndex = 0;
+         usedIndex < kUsedSubcarriers.size();
+         ++usedIndex) {
+
+        const std::size_t bin =
+            fft_bin(
+                kUsedSubcarriers[usedIndex]
+            );
 
         const auto known =
-            known_lltf_frequency_[k];
+            known_lltf_frequency_[bin];
 
-        if (std::norm(known) <= 0.0F) {
-            result.frequency_response[k] = {
-                0.0F,
-                0.0F
-            };
-            continue;
+        if (
+            std::norm(known)
+            < kKnownLltfMinimumMagnitudeSquared
+        ) {
+            return result;
         }
 
         const auto averageReceived =
             0.5F
             * (
-                firstFrequency[k]
-                + secondFrequency[k]
+                firstFrequency[bin]
+                + secondFrequency[bin]
             );
+
+        const auto difference =
+            firstFrequency[bin]
+            - secondFrequency[bin];
 
         const auto h =
             averageReceived / known;
 
-        result.frequency_response[k] = h;
+        result.frequency_response[bin] = h;
 
-        const auto difference =
-            firstFrequency[k]
-            - secondFrequency[k];
+        result.used_subcarrier_csi[
+            usedIndex
+        ] = h;
 
-        signalPower += std::norm(averageReceived);
-        noisePower += 0.5F * std::norm(difference);
+        signalPower +=
+            std::norm(averageReceived);
 
-        if (usedIndex < kWifiUsedSubcarriers) {
-            result.used_subcarrier_csi[usedIndex] = h;
-            ++usedIndex;
-        }
+        noisePower +=
+            0.5F
+            * std::norm(difference);
     }
-
-    if (usedIndex != kWifiUsedSubcarriers) {
-        return result;
-    }
-
     signalPower /= static_cast<float>(
         kWifiUsedSubcarriers
     );

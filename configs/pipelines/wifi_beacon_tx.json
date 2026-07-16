@@ -1,0 +1,32 @@
+{
+  "pipeline": {
+    "mode": "online_tx",
+    "waveform": "wifi_nonht",
+    "profile": "wifi_beacon_6mbps"
+  },
+
+  "radio": {
+    "device_args": "serial=34B739F",
+    "channel": 0,
+    "antenna": "TX/RX",
+    "center_frequency_hz": 2462000000,
+    "sample_rate_hz": 20000000,
+    "gain_db": 76
+  },
+
+  "scheduler": {
+    "interval_seconds": 0.1024,
+    "queue_capacity": 32
+  },
+
+  "waveform_config": {
+    "ssid": "USRP_CHANNEL11",
+    "bssid": "02:11:22:33:44:55",
+    "wifi_channel": 11,
+    "beacon_interval_tu": 100,
+    "scrambler_state": 93,
+    "transmitter_id": 1,
+    "experiment_id": 1,
+    "vendor_magic": "ALBSENS"
+  }
+}
