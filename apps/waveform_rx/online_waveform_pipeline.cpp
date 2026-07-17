@@ -65,6 +65,92 @@ std::uint64_t steady_now_ns() {
     );
 }
 
+std::unique_ptr<std::ofstream> open_jsonl_output(
+    const std::filesystem::path& path
+) {
+    if (
+        path.has_parent_path()
+        && !path.parent_path().empty()
+    ) {
+        std::filesystem::create_directories(
+            path.parent_path()
+        );
+    }
+
+    auto output = std::make_unique<std::ofstream>(
+        path,
+        std::ios::out | std::ios::trunc
+    );
+
+    if (!*output) {
+        throw std::runtime_error(
+            "No se pudo crear el fichero JSONL: "
+            + path.string()
+        );
+    }
+
+    return output;
+}
+
+void write_jsonl(
+    std::ofstream& output,
+    const nlohmann::json& row,
+    const std::string& description
+) {
+    output << row.dump() << '\n';
+    output.flush();
+
+    if (!output) {
+        throw std::runtime_error(
+            "Error escribiendo " + description
+        );
+    }
+}
+
+std::uint64_t samples_to_ns(
+    const std::uint64_t samples,
+    const double sample_rate_hz
+) {
+    if (sample_rate_hz <= 0.0) {
+        return 0U;
+    }
+
+    return static_cast<std::uint64_t>(
+        std::llround(
+            (
+                static_cast<double>(samples)
+                / sample_rate_hz
+            )
+            * 1.0e9
+        )
+    );
+}
+
+std::uint64_t estimated_packet_duration_ns(
+    const sensing::FeatureFrame& frame
+) {
+    const auto symbols =
+        frame.numeric_metadata.find(
+            "number_of_data_symbols"
+        );
+
+    if (symbols == frame.numeric_metadata.end()) {
+        return 0U;
+    }
+
+    /*
+     * Duración NON-HT desde el inicio de L-STF hasta el
+     * final de DATA: preámbulo+L-SIG (20 us) y símbolos
+     * OFDM de 4 us.
+     */
+    const double duration_us =
+        20.0 + 4.0 * symbols->second;
+
+    return static_cast<std::uint64_t>(
+        std::llround(duration_us * 1000.0)
+    );
+}
+
 struct OnlineIqBlock {
     sensing::IqBlock block;
 
@@ -77,6 +163,31 @@ struct OnlineIqBlock {
      */
     std::uint64_t host_received_ns{0};
 };
+
+std::uint64_t estimated_host_time_ns(
+    const OnlineIqBlock& item,
+    const std::uint64_t sample_index
+) {
+    const std::uint64_t block_end =
+        item.block.first_sample_index
+        + static_cast<std::uint64_t>(
+            item.block.samples.size()
+        );
+
+    if (sample_index >= block_end) {
+        return item.host_received_ns;
+    }
+
+    const std::uint64_t delta_ns =
+        samples_to_ns(
+            block_end - sample_index,
+            item.block.sample_rate_hz
+        );
+
+    return delta_ns < item.host_received_ns
+        ? item.host_received_ns - delta_ns
+        : 0U;
+}
 
 struct OnlineStats {
     std::atomic<std::uint64_t> rx_blocks{0};
@@ -342,6 +453,45 @@ int main(int argc, char** argv) {
                 );
         }
 
+        const bool write_timings =
+            output_config.value(
+                "write_timings",
+                false
+            );
+
+        std::filesystem::path frame_timing_path;
+        std::filesystem::path block_timing_path;
+        std::unique_ptr<std::ofstream>
+            frame_timing_output;
+        std::unique_ptr<std::ofstream>
+            block_timing_output;
+
+        if (write_timings) {
+            frame_timing_path =
+                output_config.value(
+                    "frame_timing_path",
+                    std::string{
+                        "results/csi/live/"
+                        "frame_timings.jsonl"
+                    }
+                );
+
+            block_timing_path =
+                output_config.value(
+                    "block_timing_path",
+                    std::string{
+                        "results/csi/live/"
+                        "block_timings.jsonl"
+                    }
+                );
+
+            frame_timing_output =
+                open_jsonl_output(frame_timing_path);
+
+            block_timing_output =
+                open_jsonl_output(block_timing_path);
+        }
+
         std::unique_ptr<sensing::IFeaturePublisher>
             publisher;
 
@@ -427,6 +577,20 @@ int main(int argc, char** argv) {
             << (
                 csi_raw_writer
                 ? csi_raw_path.string()
+                : std::string{"disabled"}
+            )
+            << '\n'
+            << "Tiempos por frame : "
+            << (
+                frame_timing_output
+                ? frame_timing_path.string()
+                : std::string{"disabled"}
+            )
+            << '\n'
+            << "Tiempos por bloque: "
+            << (
+                block_timing_output
+                ? block_timing_path.string()
                 : std::string{"disabled"}
             )
             << '\n'
@@ -728,11 +892,24 @@ int main(int argc, char** argv) {
                         for (const auto& frame : frames) {
                             ++online_stats.frames;
 
+                            const std::uint64_t
+                                output_started_ns =
+                                    steady_now_ns();
+
+                            std::uint64_t json_finished_ns =
+                                output_started_ns;
+
                             if (feature_writer) {
                                 feature_writer->write(frame);
+                                json_finished_ns =
+                                    steady_now_ns();
 
                                 ++online_stats.local_written;
                             }
+
+                            const std::uint64_t
+                                csi_started_ns =
+                                    steady_now_ns();
 
                             if (csi_raw_writer) {
                                 if (
@@ -747,6 +924,10 @@ int main(int argc, char** argv) {
 
                                 csi_raw_writer->write(frame);
                             }
+
+                            const std::uint64_t
+                                csi_finished_ns =
+                                    steady_now_ns();
 
                             if (publisher) {
                                 const bool published =
@@ -769,10 +950,180 @@ int main(int argc, char** argv) {
 
                             const double queue_latency_ms =
                                 static_cast<double>(
-                                    processed_ns
+                                    csi_finished_ns
                                     - item->host_received_ns
                                 )
                                 / 1.0e6;
+
+                            if (frame_timing_output) {
+                                const std::uint64_t
+                                    packet_duration_ns =
+                                        estimated_packet_duration_ns(
+                                            frame
+                                        );
+
+                                const std::uint64_t
+                                    packet_end_sample =
+                                        frame.sample_offset
+                                        + static_cast<
+                                            std::uint64_t
+                                        >(
+                                            std::llround(
+                                                (
+                                                    static_cast<double>(
+                                                        packet_duration_ns
+                                                    )
+                                                    / 1.0e9
+                                                )
+                                                * frame.sample_rate_hz
+                                            )
+                                        );
+
+                                const std::uint64_t
+                                    packet_start_host_ns =
+                                        estimated_host_time_ns(
+                                            *item,
+                                            frame.sample_offset
+                                        );
+
+                                const std::uint64_t
+                                    packet_end_host_ns =
+                                        estimated_host_time_ns(
+                                            *item,
+                                            packet_end_sample
+                                        );
+
+                                nlohmann::json timing{
+                                    {
+                                        "schema",
+                                        "wifi_frame_timing_v1"
+                                    },
+                                    {
+                                        "packet_counter",
+                                        frame.packet_counter
+                                    },
+                                    {
+                                        "sample_offset",
+                                        frame.sample_offset
+                                    },
+                                    {
+                                        "block_first_sample",
+                                        item->block
+                                            .first_sample_index
+                                    },
+                                    {
+                                        "block_sample_count",
+                                        item->block.samples.size()
+                                    },
+                                    {
+                                        "host_received_steady_ns",
+                                        item->host_received_ns
+                                    },
+                                    {
+                                        "processing_started_steady_ns",
+                                        processing_started_ns
+                                    },
+                                    {
+                                        "json_finished_steady_ns",
+                                        json_finished_ns
+                                    },
+                                    {
+                                        "csi_finished_steady_ns",
+                                        csi_finished_ns
+                                    },
+                                    {
+                                        "queue_wait_us",
+                                        (
+                                            processing_started_ns
+                                            - item->host_received_ns
+                                        ) / 1000U
+                                    },
+                                    {
+                                        "block_processing_us",
+                                        processing_time_us
+                                    },
+                                    {
+                                        "json_write_us",
+                                        (
+                                            json_finished_ns
+                                            - output_started_ns
+                                        ) / 1000U
+                                    },
+                                    {
+                                        "csi_write_us",
+                                        (
+                                            csi_finished_ns
+                                            - csi_started_ns
+                                        ) / 1000U
+                                    },
+                                    {
+                                        "output_total_us",
+                                        (
+                                            csi_finished_ns
+                                            - output_started_ns
+                                        ) / 1000U
+                                    },
+                                    {
+                                        "block_received_to_json_us",
+                                        (
+                                            json_finished_ns
+                                            - item->host_received_ns
+                                        ) / 1000U
+                                    },
+                                    {
+                                        "block_received_to_csi_us",
+                                        (
+                                            csi_finished_ns
+                                            - item->host_received_ns
+                                        ) / 1000U
+                                    },
+                                    {
+                                        "packet_duration_us",
+                                        packet_duration_ns / 1000U
+                                    },
+                                    {
+                                        "packet_start_to_json_us",
+                                        (
+                                            json_finished_ns
+                                            - packet_start_host_ns
+                                        ) / 1000U
+                                    },
+                                    {
+                                        "packet_start_to_csi_us",
+                                        (
+                                            csi_finished_ns
+                                            - packet_start_host_ns
+                                        ) / 1000U
+                                    },
+                                    {
+                                        "packet_end_to_json_us",
+                                        (
+                                            json_finished_ns
+                                            - packet_end_host_ns
+                                        ) / 1000U
+                                    },
+                                    {
+                                        "packet_end_to_csi_us",
+                                        (
+                                            csi_finished_ns
+                                            - packet_end_host_ns
+                                        ) / 1000U
+                                    },
+                                    {
+                                        "radio_time_semantics",
+                                        "estimated_from_block_end_"
+                                        "host_delivery_and_sample_"
+                                        "offset_includes_usb_host_"
+                                        "delivery_uncertainty"
+                                    }
+                                };
+
+                                write_jsonl(
+                                    *frame_timing_output,
+                                    timing,
+                                    "timing por frame"
+                                );
+                            }
 
                             const auto interval_it =
                                 frame.numeric_metadata.find(
@@ -834,6 +1185,83 @@ int main(int argc, char** argv) {
                                     << "superior al intervalo "
                                     << "del beacon\n";
                             }
+                        }
+
+                        if (block_timing_output) {
+                            const std::uint64_t
+                                block_finished_ns =
+                                    steady_now_ns();
+
+                            nlohmann::json timing{
+                                {
+                                    "schema",
+                                    "wifi_block_timing_v1"
+                                },
+                                {
+                                    "first_sample",
+                                    item->block.first_sample_index
+                                },
+                                {
+                                    "sample_count",
+                                    item->block.samples.size()
+                                },
+                                {
+                                    "host_received_steady_ns",
+                                    item->host_received_ns
+                                },
+                                {
+                                    "queue_wait_us",
+                                    (
+                                        processing_started_ns
+                                        - item->host_received_ns
+                                    ) / 1000U
+                                },
+                                {
+                                    "processing_us",
+                                    processing_time_us
+                                },
+                                {
+                                    "block_total_us",
+                                    (
+                                        block_finished_ns
+                                        - processing_started_ns
+                                    ) / 1000U
+                                },
+                                {
+                                    "candidates",
+                                    block_candidates
+                                },
+                                {
+                                    "synchronized",
+                                    block_synchronized
+                                },
+                                {
+                                    "decoded",
+                                    block_decoded
+                                },
+                                {
+                                    "frames",
+                                    frames.size()
+                                },
+                                {
+                                    "queue_depth_after",
+                                    iq_queue.size()
+                                },
+                                {
+                                    "overflow",
+                                    item->overflow
+                                },
+                                {
+                                    "discontinuity",
+                                    item->discontinuity
+                                }
+                            };
+
+                            write_jsonl(
+                                *block_timing_output,
+                                timing,
+                                "timing por bloque"
+                            );
                         }
                     }
                 } catch (const std::exception& error) {

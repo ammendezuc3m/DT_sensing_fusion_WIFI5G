@@ -29,7 +29,10 @@
     "publisher": "none",
     "write_csi_raw": true,
     "csi_raw_path": "results/csi/live/latest_csi.cf32",
-    "csi_elements_per_frame": 52
+    "csi_elements_per_frame": 52,
+    "write_timings": false,
+    "frame_timing_path": "results/csi/live/frame_timings.jsonl",
+    "block_timing_path": "results/csi/live/block_timings.jsonl"
   },
   "waveform_config": {
     "preamble_reference": "tests/golden/references/wifi_nonht_preamble_cf32.dat",
