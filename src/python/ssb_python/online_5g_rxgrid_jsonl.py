@@ -19,8 +19,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import sys
 import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -38,6 +40,26 @@ from profile_online_datassb_pipeline import (
     extract_rxgrid_from_waveform,
     make_rx_streamer,
 )
+
+
+class StopRequest:
+    def __init__(self) -> None:
+        self.requested = False
+
+
+@contextmanager
+def defer_sigint_to_iteration_boundary():
+    request = StopRequest()
+    previous_handler = signal.getsignal(signal.SIGINT)
+
+    def request_stop(_signum, _frame) -> None:
+        request.requested = True
+
+    signal.signal(signal.SIGINT, request_stop)
+    try:
+        yield request
+    finally:
+        signal.signal(signal.SIGINT, previous_handler)
 
 
 def parse_args() -> argparse.Namespace:
@@ -297,7 +319,7 @@ def main() -> None:
     valid_frames = 0
     invalid_frames = 0
 
-    with output_path.open(
+    with defer_sigint_to_iteration_boundary() as stop_request, output_path.open(
         output_mode,
         encoding="utf-8",
         buffering=1,
@@ -305,7 +327,7 @@ def main() -> None:
         iteration = 0
 
         try:
-            while True:
+            while not stop_request.requested:
                 if (
                     args.num_iters > 0
                     and iteration >= args.num_iters
@@ -444,7 +466,10 @@ def main() -> None:
                 iteration += 1
 
         except KeyboardInterrupt:
-            print("\nStopping after Ctrl+C.")
+            stop_request.requested = True
+
+    if stop_request.requested:
+        print("\nStopping after Ctrl+C.")
 
     print("\n=== Final statistics ===")
     print(f"iterations:         {iteration}")
